@@ -18,14 +18,25 @@ def create_backup_workspaces(context):
 
     created = []
 
+    # Fetch existing workspace names
+    existing_url = f"https://api.astronomer.io/platform/v1beta1/organizations/{ASTRO_ORGANIZATION_ID}/workspaces"
+    existing_resp = requests.get(existing_url, headers=HEADERS)
+    existing_resp.raise_for_status()
+    existing_workspaces = existing_resp.json().get("workspaces", [])
+    existing_names = {ws["name"] for ws in existing_workspaces}
+
     for entry in workspace_entries:
         source_id = entry["source_workspace_id"]
-        backup_label = entry["backup_workspace_label"]
+        backup_name = entry["backup_workspace_name"]
 
-        print(f"Creating backup workspace for {source_id} as {backup_label}")
+        if backup_name in existing_names:
+            print(f"Skipping creation: Workspace '{backup_name}' already exists.")
+            continue
+
+        print(f"Creating backup workspace for {source_id} as {backup_name}")
 
         payload = {
-            "name": backup_label,
+            "name": backup_name,
             "description": f"Backup for workspace {source_id}",
             "cicdEnforcedDefault": True
         }
@@ -33,17 +44,8 @@ def create_backup_workspaces(context):
         url = f"https://api.astronomer.io/platform/v1beta1/organizations/{ASTRO_ORGANIZATION_ID}/workspaces"
         response = requests.post(url, headers=HEADERS, json=payload)
 
-        print("Response status:", response.status_code)
-        print("Response body:", response.text)
-
-        if response.status_code >= 300:
-            raise Exception(f"Failed to create backup workspace for {source_id}:\n{response.text}")
-
-        result = response.json()
-        created.append({
-            "source_workspace_id": source_id,
-            "backup_workspace_id": result["id"],
-            "backup_workspace_label": result["name"]
-        })
-
-    return created
+        if response.status_code == 201:
+            print(f"Successfully created backup workspace: {backup_name}")
+            created.append(backup_name)
+        else:
+            print(f"Failed to create backup workspace {backup_name}. Status: {response.status_code}, Message: {response.text}")

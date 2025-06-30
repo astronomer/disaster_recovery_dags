@@ -4,6 +4,7 @@ from airflow.operators.python import PythonOperator
 from include.get_deployments import get_deployments
 from include.create_backup_workspaces import create_backup_workspaces
 from airflow.models.xcom_arg import XComArg
+from include.create_backup_deployments import create_backup_deployments
 
 default_args = {
     "owner": "airflow",
@@ -31,4 +32,9 @@ with DAG(
         op_args=[XComArg(get_deployments_task)],
     )
 
-    get_deployments_task >> create_backup_workspaces_task
+    create_backup_deployments_task = PythonOperator(
+        task_id="create_backup_deployments",
+        python_callable=create_backup_deployments,
+    )
+
+    get_deployments_task >> create_backup_workspaces_task >> create_backup_deployments_task
