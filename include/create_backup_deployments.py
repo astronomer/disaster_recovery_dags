@@ -87,7 +87,7 @@ def create_backup_deployments():
 
         # Create backup payload
         payload = {
-            "name": f"backup-{deployment_data['name']}",
+            "name": f"{deployment_data['name']}",
             "description": f"Backup of {deployment_data['name']}",
             "workspaceId": backup_workspace_id,
             "clusterId": NEW_CLUSTER_ID,
