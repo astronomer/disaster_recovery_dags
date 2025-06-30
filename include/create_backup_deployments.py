@@ -106,6 +106,7 @@ def create_backup_deployments():
             "defaultTaskPodCpu": deployment_data.get("defaultTaskPodCpu"),
             "defaultTaskPodMemory": deployment_data.get("defaultTaskPodMemory"),
             "workerQueues": deployment_data.get("workerQueues", []),
+            "isDevelopmentMode": True,  # ✅ Added line
         }
 
         log.info(f"📦 Creating backup deployment with payload:\n{json.dumps(payload, indent=2)}")
