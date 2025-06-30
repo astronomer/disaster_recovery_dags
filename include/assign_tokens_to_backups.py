@@ -67,11 +67,11 @@ def get_workspace_hierarchy_with_deployments():
             continue
 
         src_deps = [
-            {"deployment_id": d["id"], "deployment_name": d["name"]}
+            {"deployment_id": d["id"], "deployment_name": d["name"], "deployment_url": d["webServerUrl"]}
             for d in all_deployments if d["workspaceId"] == src_id
         ]
         bkp_deps = [
-            {"deployment_id": d["id"], "deployment_name": d["name"]}
+            {"deployment_id": d["id"], "deployment_name": d["name"], "deployment_url": d["webServerUrl"]}
             for d in all_deployments if d["workspaceId"] == bkp_id
         ]
 
@@ -222,6 +222,7 @@ def get_workspace_hierarchy_with_deployments_with_tokens():
                 src_deps.append({
                     "deployment_id": d["id"],
                     "deployment_name": d["name"],
+                    "deployment_url": d["webServerUrl"],
                     "tokens": tokens
                 })
 
@@ -233,6 +234,7 @@ def get_workspace_hierarchy_with_deployments_with_tokens():
                 bkp_deps.append({
                     "deployment_id": d["id"],
                     "deployment_name": d["name"],
+                    "deployment_url": d["webServerUrl"],
                     "tokens": tokens
                 })
 

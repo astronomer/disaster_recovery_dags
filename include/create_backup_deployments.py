@@ -85,6 +85,10 @@ def create_backup_deployments():
             log.warning(f"⚠️ Skipping {deployment_id} - no workspace with name '{backup_name}'")
             continue
 
+        environment_variables = deployment_data.get("environmentVariables", [])
+        for env_var in environment_variables:
+            env_var.pop("updatedAt", None)
+
         # Create backup payload
         payload = {
             "name": f"{deployment_data['name']}",
@@ -99,7 +103,7 @@ def create_backup_deployments():
             "isHighAvailability": deployment_data.get("isHighAvailability", False),
             "schedulerSize": deployment_data.get("schedulerSize"),
             "executor": deployment_data["executor"],
-            "environmentVariables": deployment_data.get("environmentVariables", []),
+            # "environmentVariables": environment_variables,
             "type": "DEDICATED",
             "resourceQuotaCpu": deployment_data.get("resourceQuotaCpu"),
             "resourceQuotaMemory": deployment_data.get("resourceQuotaMemory"),
@@ -113,7 +117,7 @@ def create_backup_deployments():
 
         create_url = f"{ASTRO_API_URL}/organizations/{ORG_ID}/deployments"
         create_resp = requests.post(create_url, headers=HEADERS, json=payload)
-        if create_resp.status_code != 201:
+        if create_resp.status_code not in (200, 201):
             log.error(f"❌ Failed to create backup: {create_resp.status_code} {create_resp.text}")
         else:
             created = create_resp.json()
