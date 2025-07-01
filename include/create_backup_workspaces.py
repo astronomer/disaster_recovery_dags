@@ -58,7 +58,7 @@ def create_backup_workspaces(source_workspace_id, backup_workspace_name, context
             print(f"Failed to create backup workspace {backup_workspace_name}. Status: {response.status_code}, Message: {response.text}")
 
         get_tokens_url = f"https://api.astronomer.io/iam/v1beta1/organizations/{ASTRO_ORGANIZATION_ID}/tokens?workspaceId={source_workspace_id}"
-        response = requests.get(get_tokens_url, headers=HEADERS, json=payload)
+        response = requests.get(get_tokens_url, headers=HEADERS)
         response.raise_for_status()
         tokens = response.json().get("tokens", [])
 

@@ -59,7 +59,7 @@ def dr_maintenance_dag():
         source_deployment_id = deployment.get("source_deployment_id")
         deployment_payload = deployment.get("deployment_payload")
         context["source_deployment_id"] = f"Backup for Deployment ID - {source_deployment_id}"
-        create_backup_deployments(deployment_payload, context)
+        create_backup_deployments(deployment_payload, source_deployment_id, context)
 
     @task(trigger_rule="none_failed", map_index_template="{{ backup_deployment_id }}")
     def manage_backup_hibernation_task(action, deployment_id):
@@ -96,19 +96,19 @@ def dr_maintenance_dag():
 
     created_deployments_ids = create_backup_deployments_task.expand(deployment=deployments_payload)
 
-    unhibernate_task = manage_backup_hibernation_task.override(task_id="unhibernate_backup_deployments").partial(action="unhibernate").expand(deployment_id=created_deployments_ids)
+    # unhibernate_task = manage_backup_hibernation_task.override(task_id="unhibernate_backup_deployments").partial(action="unhibernate").expand(deployment_id=created_deployments_ids)
     
-    hibernate_task = manage_backup_hibernation_task.override(task_id="hibernate_backup_deployments").partial(action="hibernate").expand(deployment_id=created_deployments_ids)
+    # hibernate_task = manage_backup_hibernation_task.override(task_id="hibernate_backup_deployments").partial(action="hibernate").expand(deployment_id=created_deployments_ids)
 
-    # Todo:
-    create_token = create_and_set_token_for_backup_deployments_task.expand(deployment_id=created_deployments_ids)
+    # # Todo:
+    # create_token = create_and_set_token_for_backup_deployments_task.expand(deployment_id=created_deployments_ids)
 
-    # Todo:
-    deploy_dags = deploy_dags_to_backup_deployments_task.expand(deployment_id=deployments_payload)
+    # # Todo:
+    # deploy_dags = deploy_dags_to_backup_deployments_task.expand(deployment_id=deployments_payload)
 
-    # Todo:
-    migrate_dags_metadata = migrate_metadata_to_backup_deployments_task.expand(deployment_id=deployments_payload)
+    # # Todo:
+    # migrate_dags_metadata = migrate_metadata_to_backup_deployments_task.expand(deployment_id=deployments_payload)
 
-    unhibernate_task >> create_token >> deploy_dags >> migrate_dags_metadata >> hibernate_task
+    # unhibernate_task >> create_token >> deploy_dags >> migrate_dags_metadata >> hibernate_task
 
 dr_maintenance_dag()

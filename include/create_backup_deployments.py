@@ -59,7 +59,7 @@ def get_source_deployments_payload(source_workspace_id, backup_workspace_id, con
     return deployments_mapping
 
 
-def create_backup_deployments(deployment_payload, context):
+def create_backup_deployments(deployment_payload, source_deployment_id, context):
     create_url = f"{ASTRO_API_URL}/organizations/{ORG_ID}/deployments"
     create_resp = requests.post(create_url, headers=HEADERS, json=deployment_payload)
     if "already exists" in create_resp.text:
@@ -72,8 +72,34 @@ def create_backup_deployments(deployment_payload, context):
         
     elif create_resp.status_code in (201, 200):
         created = create_resp.json()
-        print(f"Created backup deployment: {created['id']} ({created['name']})")
-        return created['id']
+        backup_deployment_id = created['id']
+        print(f"Created backup deployment: {backup_deployment_id} ({created['name']})")
+
+        get_tokens_url = f"https://api.astronomer.io/iam/v1beta1/organizations/{ORG_ID}/tokens?deploymentId={source_deployment_id}"
+        response = requests.get(get_tokens_url, headers=HEADERS)
+        response.raise_for_status()
+        tokens = response.json().get("tokens", [])
+
+        for token in tokens:
+            token_name = token.get("name")
+            token_description = token.get("description")
+            token_roles = token.get("roles")
+            token_type = token.get("type")
+            for role in token_roles:
+                token_payload = {
+                    "name": f"Backup for {token_name}",
+                    "description": f"Backup for {token_description}",
+                    "role": role.get("role"),
+                    "type": token_type,
+                    "entityId": backup_deployment_id
+                }
+                create_token_url = f"https://api.astronomer.io/iam/v1beta1/organizations/{ORG_ID}/tokens"
+                token_response = requests.post(create_token_url, headers=HEADERS, json=token_payload)
+                if token_response.status_code in (201, 200):
+                    print(f"Successfully created token: {token_name} for backup deployment {backup_deployment_id}")
+                else:
+                    print(f"Failed to create token {token_name} for backup deployment {backup_deployment_id}. Status: {token_response.status_code}, Message: {token_response.text}")
+        return backup_deployment_id
     else:
         raise AirflowException(f"Failed to create backup: {create_resp.status_code} {create_resp.text}")
 
