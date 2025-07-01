@@ -13,6 +13,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Path to the workspaces_to_backup.json file
 WORKSPACES_JSON_PATH = os.path.join(os.path.dirname(__file__), "workspaces_to_backup.json")
+ASTRO_API_TOKEN = os.getenv("ASTRO_API_TOKEN")
 
 def get_headers(token: str) -> dict:
     """
@@ -64,7 +65,7 @@ def get_headers(token: str) -> dict:
 #             log.error(f"Response: {e.response.text}")
 #         raise
 
-def post_target_dag_runs(target_airflow_base_url: str, target_astro_token: str, dag_runs: List[dict], dag_id: str) -> None:
+def post_target_dag_runs(target_airflow_base_url: str, dag_runs: List[dict], dag_id: str) -> None:
     """
     Post dag runs to target Airflow
     """
@@ -74,7 +75,7 @@ def post_target_dag_runs(target_airflow_base_url: str, target_astro_token: str, 
         response = requests.post(
             url,
             json=data,
-            headers=get_headers(target_astro_token),
+            headers=get_headers(ASTRO_API_TOKEN),
             verify=False,
             timeout=300,
         )
@@ -92,7 +93,7 @@ def post_target_dag_runs(target_airflow_base_url: str, target_astro_token: str, 
             log.error(f"An unexpected error occurred while posting dag runs for {dag_id}: {e}")
             raise
 
-def post_target_task_instances(target_airflow_base_url: str, target_astro_token: str, ti: List[dict], dag_id: str) -> None:
+def post_target_task_instances(target_airflow_base_url: str, ti: List[dict], dag_id: str) -> None:
     """
     Post task instances to target Airflow
     """
@@ -102,7 +103,7 @@ def post_target_task_instances(target_airflow_base_url: str, target_astro_token:
         response = requests.post(
             url,
             json=data,
-            headers=get_headers(target_astro_token),
+            headers=get_headers(ASTRO_API_TOKEN),
             verify=False,
             timeout=300,
         )
@@ -120,7 +121,7 @@ def post_target_task_instances(target_airflow_base_url: str, target_astro_token:
             log.error(f"An unexpected error occurred while posting task instances for {dag_id}: {e}")
             raise
 
-def get_source_dag_runs(source_airflow_base_url: str, source_astro_token: str, dag_id: str, offset: int, max_obj_fetch_num_per_req: int) -> dict:
+def get_source_dag_runs(source_airflow_base_url: str, dag_id: str, offset: int, max_obj_fetch_num_per_req: int) -> dict:
     """
     Get dag runs from source Airflow
     """
@@ -129,7 +130,7 @@ def get_source_dag_runs(source_airflow_base_url: str, source_astro_token: str, d
     response = requests.get(
         url,
         params=params,
-        headers=get_headers(source_astro_token),
+        headers=get_headers(ASTRO_API_TOKEN),
         verify=False,
         timeout=300,
     )
@@ -137,7 +138,7 @@ def get_source_dag_runs(source_airflow_base_url: str, source_astro_token: str, d
     json_response = response.json()
     return json_response.get("dag_runs", [])
 
-def get_source_task_instances(source_airflow_base_url: str, source_astro_token: str, dag_id: str, offset: int, max_obj_fetch_num_per_req: int) -> dict:
+def get_source_task_instances(source_airflow_base_url: str, dag_id: str, offset: int, max_obj_fetch_num_per_req: int) -> dict:
     """
     Get task instances from source Airflow
     """
@@ -146,7 +147,7 @@ def get_source_task_instances(source_airflow_base_url: str, source_astro_token: 
     response = requests.get(
         url,
         params=params,
-        headers=get_headers(source_astro_token),
+        headers=get_headers(ASTRO_API_TOKEN),
         verify=False,
         timeout=300,
     )
@@ -155,7 +156,7 @@ def get_source_task_instances(source_airflow_base_url: str, source_astro_token: 
     return result.get("task_instances", [])
 
 
-def get_all_source_dag_runs(source_airflow_base_url: str, source_astro_token: str, dag_id: str, max_obj_fetch_num_per_req: int) -> List[dict]:
+def get_all_source_dag_runs(source_airflow_base_url: str, dag_id: str, max_obj_fetch_num_per_req: int) -> List[dict]:
     """
     Get all dag runs for a dag_id.
     """
@@ -163,14 +164,14 @@ def get_all_source_dag_runs(source_airflow_base_url: str, source_astro_token: st
     all_dag_runs = []
     while True:
         log.info(f"Getting dag runs for dag_id: {dag_id}, offset: {offset}")
-        dag_runs = get_source_dag_runs(source_airflow_base_url, source_astro_token, dag_id=dag_id, offset=offset, max_obj_fetch_num_per_req=max_obj_fetch_num_per_req)
+        dag_runs = get_source_dag_runs(source_airflow_base_url, dag_id=dag_id, offset=offset, max_obj_fetch_num_per_req=max_obj_fetch_num_per_req)
         all_dag_runs.extend(dag_runs)
         if len(dag_runs) < max_obj_fetch_num_per_req: # No more pages if fewer than limit are returned
             break
         offset += max_obj_fetch_num_per_req
     return all_dag_runs
 
-def get_all_source_task_instances(source_airflow_base_url: str, source_astro_token: str, dag_id: str, max_obj_fetch_num_per_req: int) -> List[dict]:
+def get_all_source_task_instances(source_airflow_base_url: str, dag_id: str, max_obj_fetch_num_per_req: int) -> List[dict]:
     """
     Get all task instances for a dag_id.
     """
@@ -178,7 +179,7 @@ def get_all_source_task_instances(source_airflow_base_url: str, source_astro_tok
     all_task_instances = []
     while True:
         log.info(f"Getting task instances for dag_id: {dag_id}, offset: {offset}")
-        task_instances = get_source_task_instances(source_airflow_base_url, source_astro_token, dag_id=dag_id, offset=offset, max_obj_fetch_num_per_req=max_obj_fetch_num_per_req)
+        task_instances = get_source_task_instances(source_airflow_base_url, dag_id=dag_id, offset=offset, max_obj_fetch_num_per_req=max_obj_fetch_num_per_req)
         all_task_instances.extend(task_instances)
         if len(task_instances) < max_obj_fetch_num_per_req: # No more pages if fewer than limit are returned
             break
@@ -189,7 +190,7 @@ def get_source_variables(source_airflow_base_url: str, source_astro_token: str) 
     """
     Get all variables from source Airflow
     """
-    url = f"{source_airflow_base_url}/api/starship/variables"
+    url = f"{source_airflow_base_url}/api/starship/variable"
     response = requests.get(
         url,
         headers=get_headers(source_astro_token),
@@ -204,7 +205,7 @@ def post_target_variables(target_airflow_base_url: str, target_astro_token: str,
     """
     Post variables to target Airflow
     """
-    url = f"{target_airflow_base_url}/api/starship/variables"
+    url = f"{target_airflow_base_url}/api/starship/variable"
     data = {"variables": variables}
     try:
         response = requests.post(
@@ -231,8 +232,6 @@ def post_target_variables(target_airflow_base_url: str, target_astro_token: str,
 def sync_airflow_variables(
     source_airflow_base_url: str,
     target_airflow_base_url: str,
-    source_astro_token: str,
-    target_astro_token: str,
     dry_run: bool,
     max_obj_post_num_per_req: int
 ) -> None:
@@ -240,7 +239,7 @@ def sync_airflow_variables(
     Synchronizes Airflow Variables from source to target.
     """
     log.info("Starting Airflow Variable migration.")
-    source_variables = get_source_variables(source_airflow_base_url, source_astro_token)
+    source_variables = get_source_variables(source_airflow_base_url, ASTRO_API_TOKEN)
     log.info(f"Found {len(source_variables)} variables in source Airflow.")
 
     if dry_run:
@@ -253,13 +252,13 @@ def sync_airflow_variables(
 
     for i in range(0, len(source_variables), max_obj_post_num_per_req):
         batch = source_variables[i : i + max_obj_post_num_per_req]
-        post_target_variables(target_airflow_base_url, target_astro_token, batch)
+        post_target_variables(target_airflow_base_url, ASTRO_API_TOKEN, batch)
         log.info(f"Completed {(i/len(source_variables)*100):.2f}% for variables")
     log.info("Completed 100% for variables")
     log.info(f"Synced {len(source_variables)} variables to target Airflow.")
     log.info("-" * 80)
 
-def get_all_source_dags(source_airflow_base_url: str, source_astro_token: str, max_obj_fetch_num_per_req: int) -> List[str]:
+def get_all_source_dags(source_airflow_base_url: str, max_obj_fetch_num_per_req: int) -> List[str]:
     """
     Fetches all DAG IDs from the source Airflow deployment.
     """
@@ -272,7 +271,7 @@ def get_all_source_dags(source_airflow_base_url: str, source_astro_token: str, m
         response = requests.get(
             url,
             params=params,
-            headers=get_headers(source_astro_token),
+            headers=get_headers(ASTRO_API_TOKEN),
             verify=False,
             timeout=300,
         )
@@ -291,17 +290,17 @@ def get_all_source_dags(source_airflow_base_url: str, source_astro_token: str, m
 
 
 def migrate_airflow_data(
-    astro_data: Dict[str, Any],
+    astro_data_list: List[Dict[str, Any]], # Renamed argument to reflect it's a list
     max_obj_post_num_per_req: int,
     max_obj_fetch_num_per_req: int,
     dry_run: bool = False,
 ):
     """
     Main function to orchestrate the Airflow data migration based on mapped deployments.
-    It expects the XCom output from a previous task as 'astro_data'.
+    It expects the XCom output from a previous task as a LIST of 'astro_data' entries.
     """
 
-    # Load the workspace mapping file
+    # Load the workspace mapping file (still needed for consistency checks and logic)
     if not os.path.exists(WORKSPACES_JSON_PATH):
         raise FileNotFoundError(f"workspaces_to_backup.json not found at: {WORKSPACES_JSON_PATH}")
     with open(WORKSPACES_JSON_PATH, "r") as f:
@@ -310,140 +309,96 @@ def migrate_airflow_data(
     # Create a lookup for source workspace IDs to backup workspace names
     workspace_name_map = {entry["source_workspace_id"]: entry["backup_workspace_name"] for entry in workspace_map_entries}
 
-    # Prepare lookup dictionaries for deployments from XCom
-    source_deployments_by_id = {d["deployment_id"]: d for d in astro_data["source"]["deployments"]}
-    backup_deployments_by_name_and_workspace = {
-        (d["deployment_name"], d["workspaceId"]): d 
-        for d in astro_data["backup"]["deployments"]
-    }
-    
-    # Get the workspace-level backup token for fallback if deployment-specific is missing
-    # The XCom sample shows 'backup.tokens' directly under 'backup' object, not 'deployments'.
-    backup_workspace_token = astro_data["backup"]["tokens"][0]["shortToken"] if astro_data["backup"].get("tokens") and astro_data["backup"]["tokens"] else None
-    if not backup_workspace_token:
-        log.warning("No workspace-level token found for backup workspace. This might lead to issues if backup deployments lack their own tokens.")
-
-
     log.info("Starting Airflow data migration across mapped deployments.")
+    log.info(f"Astro Data List:\n{json.dumps(astro_data_list, indent=2)}")
 
-    for source_deployment_id, source_deployment_data in source_deployments_by_id.items():
-        source_workspace_id = source_deployment_data["workspaceId"]
-        source_deployment_name = source_deployment_data["deployment_name"]
+    # Iterate over each entry in the astro_data_list
+    for astro_data_entry in astro_data_list: # Loop here
+        source_data = astro_data_entry["source"]
+        backup_data = astro_data_entry["backup"]
 
-        # Check if the source workspace is mapped for backup
-        if source_workspace_id not in workspace_name_map:
-            log.info(f"Skipping source deployment '{source_deployment_name}' ({source_deployment_id}) as its workspace '{source_workspace_id}' is not mapped in workspaces_to_backup.json.")
-            continue
+        # Prepare lookup dictionaries for deployments from current entry
+        source_deployments_by_name = {d["deployment_name"]: d for d in source_data["deployments"]}
+        backup_deployments_by_name = {(d["deployment_name"]): d for d in backup_data["deployments"]}
 
-        backup_workspace_name = workspace_name_map[source_workspace_id]
-        backup_workspace_id_from_astro_data = astro_data["backup"]["workspace_id"] # Get ID from astro_data's backup section
+        # Now, iterate through source deployments relevant to this mapping entry
+        for source_deployment_name, source_deployment_data in source_deployments_by_name.items():
+            target_deployment_name = source_deployment_name # Target deployment name is the same as source.
 
-        # The target deployment name is the same as the source one.
-        target_deployment_name = source_deployment_name
+            target_deployment_data = backup_deployments_by_name.get(target_deployment_name)
 
-        # Find the corresponding backup deployment using its name and backup workspace ID
-        target_deployment_data = backup_deployments_by_name_and_workspace.get((target_deployment_name, backup_workspace_id_from_astro_data))
+            if not target_deployment_data:
+                log.warning(f"Could not find a backup deployment named '{target_deployment_name}'. Skipping migration for this deployment pair.")
+                continue
+            
+            # Extract source and target details
+            source_airflow_base_url = f"https://{source_deployment_data['deployment_url']}"
+            target_airflow_base_url = f"https://{target_deployment_data['deployment_url']}"
 
-        if not target_deployment_data:
-            log.warning(f"Could not find a backup deployment named '{target_deployment_name}' in backup workspace '{backup_workspace_name}' ({backup_workspace_id_from_astro_data}) for source deployment '{source_deployment_name}'. Skipping migration for this deployment pair.")
-            continue
-        
-        # Extract source and target details
-        source_airflow_base_url = f"https://{source_deployment_data['deployment_url'].split('/')[2]}"
-        # Prefer deployment-specific token from source deployment data
-        source_astro_token = source_deployment_data["tokens"][0]["shortToken"] if source_deployment_data.get("tokens") else None
-        if not source_astro_token:
-            log.error(f"No token found for source deployment '{source_deployment_name}'. Skipping migration for this deployment pair.")
-            continue
 
-        target_airflow_base_url = f"https://{target_deployment_data['deployment_url'].split('/')[2]}"
-        # Prefer deployment-specific token from target deployment data, fallback to workspace-level backup token
-        target_astro_token = target_deployment_data["tokens"][0]["shortToken"] if target_deployment_data.get("tokens") else backup_workspace_token
-        if not target_astro_token:
-            log.error(f"No valid token found for backup deployment '{target_deployment_name}'. Skipping migration for this deployment pair.")
-            continue
+            log.info(f"\n--- Migrating from Source Deployment: '{source_deployment_name}' ({source_deployment_name}) ---")
+            log.info(f"--- To Backup Deployment: '{target_deployment_data['deployment_name']}' ({target_deployment_data['deployment_id']}) ---\n")
+            log.info(f"Source Airflow Base URL: {source_airflow_base_url}")
+            log.info(f"Target Airflow Base URL: {target_airflow_base_url}")
 
-        log.info(f"\n--- Migrating from Source Deployment: '{source_deployment_name}' ({source_deployment_id}) ---")
-        log.info(f"--- To Backup Deployment: '{target_deployment_data['deployment_name']}' ({target_deployment_data['deployment_id']}) ---\n")
-        log.info(f"Source Airflow Base URL: {source_airflow_base_url}")
-        log.info(f"Target Airflow Base URL: {target_airflow_base_url}")
-
-        # 1. Sync Airflow Variables for this deployment pair
-        sync_airflow_variables(
-            source_airflow_base_url=source_airflow_base_url,
-            target_airflow_base_url=target_airflow_base_url,
-            source_astro_token=source_astro_token,
-            target_astro_token=target_astro_token,
-            dry_run=dry_run,
-            max_obj_post_num_per_req=max_obj_post_num_per_req
-        )
-
-        # 2. Get all DAG IDs from the source Airflow deployment
-        all_source_dag_ids = get_all_source_dags(source_airflow_base_url, source_astro_token, max_obj_fetch_num_per_req)
-        log.info(f"Number of DAGs to migrate from '{source_deployment_name}': {len(all_source_dag_ids)}")
-
-        # 3. Loop through all DAGs and sync dag runs and task instances
-        for dag_id in all_source_dag_ids:
-            log.info(f"Processing DAG: {dag_id}")
-            # Pause Source DAG
-            # log.info(f"Pausing source dag_id: {dag_id}")
-            # if not dry_run:
-            #     pause_dag(source_airflow_base_url, source_astro_token, dag_id)
-            # else:
-            #     log.info(f"Dry run mode. Skipping pausing source dag: {dag_id}")
-
-            # Get all dag runs for the dag_id
-            log.info(f"Getting all dag runs for dag_id: {dag_id}")
-            dag_runs = get_all_source_dag_runs(
-                source_airflow_base_url,
-                source_astro_token,
-                dag_id,
-                max_obj_fetch_num_per_req
+            # 1. Sync Airflow Variables for this deployment pair
+            sync_airflow_variables(
+                source_airflow_base_url=source_airflow_base_url,
+                target_airflow_base_url=target_airflow_base_url,
+                dry_run=dry_run,
+                max_obj_post_num_per_req=max_obj_post_num_per_req
             )
 
-            if len(dag_runs) == 0:
-                log.info(f"No dag runs to sync for dag_id: {dag_id}")
-            else:
-                log.info(f"Found {len(dag_runs)} dag runs for dag_id: {dag_id}")
+            # 2. Get all DAG IDs from the source Airflow deployment
+            all_source_dag_ids = get_all_source_dags(source_airflow_base_url, max_obj_fetch_num_per_req)
+            log.info(f"Number of DAGs to migrate from '{source_deployment_name}': {len(all_source_dag_ids)}")
+
+            # 3. Loop through all DAGs and sync dag runs and task instances
+            for dag_id in all_source_dag_ids:
+                log.info(f"Processing DAG: {dag_id}")
+
+                # Get all dag runs for the dag_id
+                log.info(f"Getting all dag runs for dag_id: {dag_id}")
+                dag_runs = get_all_source_dag_runs(
+                    source_airflow_base_url,
+                    dag_id,
+                    max_obj_fetch_num_per_req
+                )
+
+                if len(dag_runs) == 0:
+                    log.info(f"No dag runs to sync for dag_id: {dag_id}")
+                else:
+                    log.info(f"Found {len(dag_runs)} dag runs for dag_id: {dag_id}")
+                    if dry_run:
+                        log.info("Dry run mode. Skipping syncing dag runs to target Airflow")
+                    else:
+                        for i in range(0, len(dag_runs), max_obj_post_num_per_req):
+                            post_target_dag_runs(target_airflow_base_url, dag_runs[i : i + max_obj_post_num_per_req], dag_id)
+                            log.info(f"Completed {(i/len(dag_runs)*100):.2f}% for dag runs")
+                        log.info("Completed 100% for dag runs")
+                        log.info(f"Synced {len(dag_runs)} dag runs to target Airflow")
+                log.info("-" * 80)
+
+                # Get all task instances for the dag_id
+                log.info(f"Getting all task instances for dag_id: {dag_id}")
+                task_instances = get_all_source_task_instances(
+                    source_airflow_base_url,
+                    dag_id,
+                    max_obj_fetch_num_per_req
+                )
+                log.info(f"Found {len(task_instances)} task instances for dag_id: {dag_id}")
+
                 if dry_run:
-                    log.info("Dry run mode. Skipping syncing dag runs to target Airflow")
+                    log.info("Dry run mode. Skipping syncing task instances to target Airflow")
                 else:
-                    for i in range(0, len(dag_runs), max_obj_post_num_per_req):
-                        post_target_dag_runs(target_airflow_base_url, target_astro_token, dag_runs[i : i + max_obj_post_num_per_req], dag_id)
-                        log.info(f"Completed {(i/len(dag_runs)*100):.2f}% for dag runs")
-                    log.info("Completed 100% for dag runs")
-                    log.info(f"Synced {len(dag_runs)} dag runs to target Airflow")
-            log.info("-" * 80)
-
-            # Get all task instances for the dag_id
-            log.info(f"Getting all task instances for dag_id: {dag_id}")
-            task_instances = get_all_source_task_instances(
-                source_airflow_base_url,
-                source_astro_token,
-                dag_id,
-                max_obj_fetch_num_per_req
-            )
-            log.info(f"Found {len(task_instances)} task instances for dag_id: {dag_id}")
-
-            if dry_run:
-                log.info("Dry run mode. Skipping syncing task instances to target Airflow")
-            else:
-                if len(task_instances) > 0:
-                    for i in range(0, len(task_instances), max_obj_post_num_per_req):
-                        post_target_task_instances(target_airflow_base_url, target_astro_token, task_instances[i : i + max_obj_post_num_per_req], dag_id)
-                        log.info(f"Completed {(i/len(task_instances)*100):.2f}% for task instances")
-                    log.info("Completed 100% for task instances")
-                    log.info(f"Synced {len(task_instances)} task instances to target Airflow")
-                else:
-                    log.info(f"No task instances found for dag_id: {dag_id}")
-            log.info("-" * 80)
-
-        # Unpause the Target DAG
-        # log.info(f"Unpausing target dag_id: {dag_id}")
-        # if not dry_run:
-        #     unpause_dag(target_airflow_base_url, target_astro_token, dag_id)
-        # else:
-        #     log.info(f"Dry run mode. Skipping unpausing target dag: {dag_id}")
-        # log.info("-" * 80)
+                    if len(task_instances) > 0:
+                        for i in range(0, len(task_instances), max_obj_post_num_per_req):
+                            post_target_task_instances(target_airflow_base_url, task_instances[i : i + max_obj_post_num_per_req], dag_id)
+                            log.info(f"Completed {(i/len(task_instances)*100):.2f}% for task instances")
+                        log.info("Completed 100% for task instances")
+                        log.info(f"Synced {len(task_instances)} task instances to target Airflow")
+                    else:
+                        log.info(f"No task instances found for dag_id: {dag_id}")
+                log.info("-" * 80)
 
     log.info("Finished syncing dag runs, task instances, and variables across all mapped deployments!")

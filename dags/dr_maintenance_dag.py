@@ -8,12 +8,12 @@ from include.get_deployments import get_deployments
 from include.create_backup_workspaces import create_backup_workspaces
 from include.create_backup_deployments import create_backup_deployments
 from include.manage_backup_hibernation import manage_backup_hibernation
-from include.assign_tokens_to_backups import log_token_recreation_plan
+from include.assign_tokens_to_backups import log_token_recreation_plan, get_workspace_hierarchy_with_deployments
 from include.migrate_airflow_data import migrate_airflow_data
 
 default_args = {
     "owner": "airflow",
-    "retries": 3,
+    "retries": 0,
     "retry_delay": 60,
 }
 
@@ -54,14 +54,19 @@ with DAG(
         python_callable=log_token_recreation_plan,
     )
 
+    workspace_hierarchy_task = PythonOperator(
+        task_id="workspace_hierarchy",
+        python_callable=get_workspace_hierarchy_with_deployments,
+    )
+
     migrate_airflow_data_task = PythonOperator(
         task_id="migrate_airflow_metadata",
         python_callable=migrate_airflow_data,
         op_kwargs={
-            "astro_data": XComArg(log_token_recreation_plan_task),
+            "astro_data_list": XComArg(workspace_hierarchy_task),
             "max_obj_post_num_per_req": int(os.environ.get("MAX_OBJ_POST_NUM_PER_REQ", "50")),
             "max_obj_fetch_num_per_req": int(os.environ.get("MAX_OBJ_FETCH_NUM_PER_REQ", "100")),
-            "dry_run": (os.environ.get("DRY_RUN", "False").lower() == "true"),
+            "dry_run": True # (os.environ.get("DRY_RUN", "False").lower() == "true"),
         },
     )
 
@@ -72,4 +77,6 @@ with DAG(
     # )
 
     # Set task dependencies
-    get_deployments_task >> create_backup_workspaces_task >> create_backup_deployments_task >> unhibernate_backup_deployments_task >> log_token_recreation_plan_task >> migrate_airflow_data_task
+    get_deployments_task >> create_backup_workspaces_task >> create_backup_deployments_task
+    create_backup_deployments_task >> unhibernate_backup_deployments_task >> log_token_recreation_plan_task 
+    log_token_recreation_plan_task >> workspace_hierarchy_task >> migrate_airflow_data_task
