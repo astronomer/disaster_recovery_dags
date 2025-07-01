@@ -50,11 +50,38 @@ def create_backup_workspaces(source_workspace_id, backup_workspace_name, context
         response = requests.post(url, headers=HEADERS, json=payload)
         
         if response.status_code in (201, 200):
+            backup_workspace_id = response.json().get("id")
             print(f"Successfully created backup workspace: {backup_workspace_name}")
             ti = context['ti']
-            ti.xcom_push(key="return_value", value={"source_workspace_id": source_workspace_id, "backup_workspace_id": response.json().get("id")})
+            ti.xcom_push(key="return_value", value={"source_workspace_id": source_workspace_id, "backup_workspace_id": backup_workspace_id})
         else:
             print(f"Failed to create backup workspace {backup_workspace_name}. Status: {response.status_code}, Message: {response.text}")
+
+        get_tokens_url = f"https://api.astronomer.io/iam/v1beta1/organizations/{ASTRO_ORGANIZATION_ID}/tokens?workspaceId={source_workspace_id}"
+        response = requests.get(get_tokens_url, headers=HEADERS, json=payload)
+        response.raise_for_status()
+        tokens = response.json().get("tokens", [])
+
+        for token in tokens:
+            token_name = token.get("name")
+            token_description = token.get("description")
+            token_roles = token.get("roles")
+            token_type = token.get("type")
+            for role in token_roles:
+                token_payload = {
+                    "name": f"Backup for {token_name}",
+                    "description": f"Backup for {token_description}",
+                    "role": role.get("role"),
+                    "type": token_type,
+                    "entityId": backup_workspace_id
+                }
+                create_token_url = f"https://api.astronomer.io/iam/v1beta1/organizations/{ASTRO_ORGANIZATION_ID}/tokens"
+                token_response = requests.post(create_token_url, headers=HEADERS, json=token_payload)
+                if token_response.status_code in (201, 200):
+                    print(f"Successfully created token: {token_name} for backup workspace {backup_workspace_name}")
+                else:
+                    print(f"Failed to create token {token_name} for backup workspace {backup_workspace_name}. Status: {token_response.status_code}, Message: {token_response.text}")
+
     else:
         raise AirflowException(f"Source workspace {source_workspace_id} not found in existing workspaces. Cannot create backup.")
 
