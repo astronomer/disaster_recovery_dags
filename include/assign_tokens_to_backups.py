@@ -263,3 +263,7 @@ def get_workspace_hierarchy_with_deployments_with_tokens():
 def log_token_recreation_plan():
     plan = get_workspace_hierarchy_with_deployments_with_tokens()
     print(plan)
+
+
+def create_token_for_backup_deployments():
+    pass

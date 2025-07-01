@@ -3,7 +3,7 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.models.xcom_arg import XComArg
 from include import assign_tokens_to_backups
-from include.get_deployments import get_deployments
+from include.get_workspaces import get_deployments
 from include.create_backup_workspaces import create_backup_workspaces
 from include.create_backup_deployments import create_backup_deployments
 from include.manage_backup_hibernation import manage_backup_hibernation

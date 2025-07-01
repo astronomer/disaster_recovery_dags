@@ -1,7 +1,6 @@
 import os
 import time
 import requests
-from include.get_deployments import get_deployments
 
 ASTRO_API_TOKEN = os.getenv("ASTRO_API_TOKEN")
 ORG_ID = os.getenv("ASTRO_ORGANIZATION_ID")
@@ -43,22 +42,8 @@ def wait_for_deployment_state(deployment_id, status, max_attempts=10, delay=15):
     return False
 
 
-def manage_backup_hibernation(deployment_set="backup", action="hibernate"):
-    if deployment_set not in ["source", "backup"]:
-        raise ValueError("deployment_set must be 'source' or 'backup'")
-    if action not in ["hibernate", "unhibernate"]:
-        raise ValueError("action must be 'hibernate' or 'unhibernate'")
-
-    deployments = get_deployments(mode=deployment_set)
-    print(f"🔍 Managing hibernation for {len(deployments)} {deployment_set} deployments - action: {action}")
-
-    for d in deployments:
-        deployment_id = d["deployment_id"]
-        deployment_name = d["deployment_name"]
+def manage_backup_hibernation(deployment_id, action):
         hibernation_url = f"{BASE_URL}/organizations/{ORG_ID}/deployments/{deployment_id}/hibernation-override"
-
-        print(f"🌐 POST {hibernation_url} → {action.upper()} {deployment_name} ({deployment_id})")
-
         try:
             response = requests.post(
                 hibernation_url,
@@ -67,20 +52,18 @@ def manage_backup_hibernation(deployment_set="backup", action="hibernate"):
             )
 
             if response.status_code == 200:
-                print(f"✅ Triggered {action} for {deployment_name}")
+                print(f"Triggered {action} for {deployment_id}")
+            elif "already hibernating" in response.text and action == "hibernate":
+                print(f"{deployment_id} is already hibernating.")
             else:
-                print(f"❌ Failed to trigger {action} for {deployment_name} ({deployment_id})")
-                print(f"    • Status: {response.status_code}")
-                print(f"    • Body: {response.text}")
-                continue
+                print(f"Failed to trigger {action} for {deployment_id}")
 
         except Exception as e:
-            print(f"🔥 Exception while attempting to {action} {deployment_name}: {str(e)}")
-            continue
+            print(f"🔥 Exception while attempting to {action} {deployment_id}: {str(e)}")
 
         # Wait for final expected state
         target = ["HIBERNATING"] if action == "hibernate" else ["HEALTHY", "READY"]
         if wait_for_deployment_state(deployment_id, status=target):
-            print(f"✅ {deployment_name} reached target state {target}")
+            print(f"✅ {deployment_id} reached target state {target}")
         else:
-            print(f"❌ {deployment_name} did not reach target state {target}")
+            print(f"❌ {deployment_id} did not reach target state {target}")
