@@ -7,7 +7,7 @@ from include.get_deployments import get_deployments
 from include.create_backup_workspaces import create_backup_workspaces
 from include.create_backup_deployments import create_backup_deployments
 from include.manage_backup_hibernation import manage_backup_hibernation
-from include.assign_tokens_to_backups import log_token_recreation_plan
+from include.fresh_start import generate_organization_hierarchy
 
 default_args = {
     "owner": "airflow",
@@ -47,10 +47,16 @@ with DAG(
         op_kwargs={"deployment_set": "backup", "action": "unhibernate"},
     )
 
-    log_token_recreation_plan_task = PythonOperator(
-        task_id="log_token_recreation_plan",
-        python_callable=log_token_recreation_plan,
+    log_recreation_plan_task = PythonOperator(
+        task_id="log_recreation_plan",
+        python_callable=generate_organization_hierarchy
     )
+
+
+    # recreate_tokens = PythonOperator(
+    #     task_id='implement_recreation_plan',
+    #     python_callable=implement_recreation_plan,
+    # )
 
     # hibernate_backup_deployments_task = PythonOperator(
     #     task_id="hibernate_backup_deployments",
@@ -59,4 +65,4 @@ with DAG(
     # )
 
     # Set task dependencies
-    get_deployments_task >> create_backup_workspaces_task >> create_backup_deployments_task >> unhibernate_backup_deployments_task >> log_token_recreation_plan_task
+    get_deployments_task >> create_backup_workspaces_task >> create_backup_deployments_task >> unhibernate_backup_deployments_task >> log_recreation_plan_task

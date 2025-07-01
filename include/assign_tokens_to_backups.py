@@ -3,6 +3,7 @@ import requests
 import logging
 import json
 from airflow.utils.log.logging_mixin import LoggingMixin
+import time
 
 # Setup logging
 log = logging.getLogger(__name__)
@@ -20,6 +21,7 @@ HEADERS = {
 }
 
 BASE_URL = f"https://api.astronomer.io/platform/v1beta1/organizations/{ASTRO_ORGANIZATION_ID}"
+IAM_BASE_URL = f"https://api.astronomer.io/iam/v1beta1/organizations/{ASTRO_ORGANIZATION_ID}"
 WORKSPACES_URL = f"{BASE_URL}/workspaces"
 DEPLOYMENTS_URL = f"{BASE_URL}/deployments"
 WORKSPACES_JSON_PATH = os.path.join(os.path.dirname(__file__), "workspaces_to_backup.json")
@@ -257,97 +259,7 @@ def get_workspace_hierarchy_with_deployments_with_tokens():
 
     return result
 
-def update_token_roles(token_id: str, roles: list[dict]) -> bool:
-    """
-    Updates the roles assigned to a token using the Astronomer IAM API.
-
-    Args:
-        token_id (str): The ID of the token to update.
-        roles (list[dict]): List of role dicts, each containing:
-            - entityId (str)
-            - entityType (str) (e.g., "WORKSPACE" or "DEPLOYMENT")
-            - role (str) (e.g., "WORKSPACE_MEMBER", "DEPLOYMENT_ADMIN")
-
-    Returns:
-        bool: True if successful, False otherwise.
-    """
-    log = logging.getLogger(__name__)
-    url = (
-        f"https://api.astronomer.io/iam/v1beta1/organizations/"
-        f"{ASTRO_ORGANIZATION_ID}/tokens/{token_id}/roles"
-    )
-
-    payload = {"roles": roles}
-    log.info("🛠️ Updating token roles...")
-    log.info(f"POST {url}")
-    log.info(f"Payload: {json.dumps(payload, indent=2)}")
-    log.info("Headers: [Authorization: Bearer ***REDACTED***]")
-    log.info("")
-
-    try:
-        response = requests.post(url, headers=HEADERS, json=payload, timeout=10)
-        response.raise_for_status()
-        log.info(f"✔ Successfully updated roles for token {token_id}")
-        return True
-    except requests.exceptions.RequestException as e:
-        log.error(f"✘ Failed to update token roles: {e}")
-        if response is not None:
-            log.error(f"Response: {response.text}")
-        return False
 
 def log_token_recreation_plan():
     plan = get_workspace_hierarchy_with_deployments_with_tokens()
-    recreation_plan = []
-
-    for entry in plan:
-        source = entry["source"]
-        backup = entry["backup"]
-
-        for token in source.get("tokens", []):
-            token_name = token.get("name", "<unnamed>")
-            token_id = token.get("id")
-            token_roles = token.get("roles", [])
-
-            deployment_roles = [
-                {
-                    "role": r["role"],
-                    "recreate_in": {
-                        "deployment_name": next(
-                            (d["deployment_name"] for d in backup["deployments"]
-                             if d["deployment_name"] == next(
-                                (sd["deployment_name"] for sd in source["deployments"]
-                                 if sd["deployment_id"] == r["entityId"]), None)
-                            ),
-                            "UNKNOWN"
-                        ),
-                        "deployment_id": r["entityId"]
-                    }
-                }
-                for r in token_roles
-                if r["entityType"] == "DEPLOYMENT"
-            ]
-
-            workspace_roles = [
-                {
-                    "role": r["role"],
-                    "recreate_in": {
-                        "workspace_name": backup["workspace_name"],
-                        "workspace_id": backup["workspace_id"]
-                    }
-                }
-                for r in token_roles
-                if r["entityType"] == "WORKSPACE"
-            ]
-
-            if deployment_roles or workspace_roles:
-                recreation_plan.append({
-                    "token_name": token_name,
-                    "token_id": token_id,
-                    "workspace_name": source["workspace_name"],
-                    "workspace_id": source["workspace_id"],
-                    "deployment_roles": deployment_roles,
-                    "workspace_roles": workspace_roles
-                })
-
-    print("🚫 The following tokens must be manually recreated in the backup environments:")
-    print(json.dumps(recreation_plan, indent=2))
+    print(plan)
