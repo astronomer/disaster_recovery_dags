@@ -5,8 +5,7 @@ from include.get_workspaces import get_workspaces
 from include.create_backup_workspaces import create_backup_workspaces, map_source_workpaces_to_backup
 from include.create_backup_deployments import create_backup_deployments, get_source_deployments_payload
 from include.manage_backup_hibernation import manage_backup_hibernation
-from include.assign_tokens_to_backups import create_token_for_backup_deployments
-from include.deploy_to_backup_deployments import deploy_dags_to_backup_deployments
+from include.deploy_to_backup_deployments import deploy_to_backup_deployments
 from include.migrate_with_starship import migrate_metadata
 
 @dag(
@@ -64,21 +63,15 @@ def dr_maintenance_dag():
     @task(trigger_rule="none_failed", map_index_template="{{ backup_deployment_id }}")
     def manage_backup_hibernation_task(action, deployment_id):
         context = get_current_context()
-        context["backup_deployment_id"] = deployment_id
+        context["backup_deployment_id"] = f"{deployment_id} - Un/Hibernate"
         manage_backup_hibernation(deployment_id, action)
 
-    @task(trigger_rule="none_failed", map_index_template="{{ backup_deployment_id }}")
-    def create_and_set_token_for_backup_deployments_task(deployment_id):
-        context = get_current_context()
-        context["backup_deployment_id"] = deployment_id
-        create_token_for_backup_deployments(context)
-
-    @task(trigger_rule="none_failed", map_index_template="{{ backup_deployment_id }}")
-    def deploy_dags_to_backup_deployments_task(deployment_id):
-        context = get_current_context()
-        context = get_current_context()
-        context["backup_deployment_id"] = deployment_id
-        deploy_dags_to_backup_deployments(context)
+    # @task(trigger_rule="none_failed", map_index_template="{{ source_deployment_id }}")
+    # def deploy_to_backup_deployments_task(deployment):
+    #     context = get_current_context()
+    #     source_deployment_id = deployment.get("source_deployment_id")
+    #     context["backup_deployment_id"] = f"Backup Deploy for - {source_deployment_id}"
+    #     deploy_to_backup_deployments(deployment)
 
     @task(trigger_rule="none_failed", map_index_template="{{ backup_deployment_id }}")
     def migrate_metadata_to_backup_deployments_task(deployment_id):
@@ -96,12 +89,11 @@ def dr_maintenance_dag():
 
     created_deployments_ids = create_backup_deployments_task.expand(deployment=deployments_payload)
 
-    # unhibernate_task = manage_backup_hibernation_task.override(task_id="unhibernate_backup_deployments").partial(action="unhibernate").expand(deployment_id=created_deployments_ids)
+    unhibernate_task = manage_backup_hibernation_task.override(task_id="unhibernate_backup_deployments").partial(action="unhibernate").expand(deployment_id=created_deployments_ids)
+
+    # deploy = deploy_to_backup_deployments_task.expand(deployment=deployments_payload)
     
     # hibernate_task = manage_backup_hibernation_task.override(task_id="hibernate_backup_deployments").partial(action="hibernate").expand(deployment_id=created_deployments_ids)
-    
-    # # Todo:
-    # deploy_dags = deploy_dags_to_backup_deployments_task.expand(deployment_id=deployments_payload)
 
     # # Todo:
     # migrate_dags_metadata = migrate_metadata_to_backup_deployments_task.expand(deployment_id=deployments_payload)
