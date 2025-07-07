@@ -177,24 +177,24 @@ def get_all_dag_runs(deployment_url, dag_id, token: str = None):
         offset += MAX_OBJ_FETCH_NUM_PER_REQ
     return all_dag_runs
 
-def post_dag_runs(deployment_url, dag_id, dag_runs, token: str = None):
+def post_dag_run(deployment_url, dag_id, dag_run, token: str = None):
     url = f"https://{deployment_url}/api/starship/dag_runs"
-    data = {"dag_runs": dag_runs}
+    data = {"dag_runs": [dag_run]}
     log.info(f"Making request to {url} with data:\n{data}")
     try:
         response = requests.post(
             url,
             json=data,
             headers=_post_header(token),
-            timeout=120,
+            timeout=30,
         )
         response.raise_for_status()
     except requests.exceptions.RequestException as e:
         if e.response is not None:
             if e.response.status_code == 409:
-                log.warning(f"Dag runs already exist in target Airflow for dag_id: {dag_id}")
+                log.warning(f"Dag run already exists in target Airflow for dag_id: {dag_id}, run_id: {dag_run.get('run_id')}")
             else:
-                log.error(f"Failed to post dag runs for dag_id: {dag_id}. Confirm dag runs in target Airflow. Could be a false failure! {e}")
+                log.error(f"Failed to post individual dag run for dag_id: {dag_id}: {e}")
                 if e.response:
                     log.error(f"Response: {e.response.text}")
                 raise
@@ -209,15 +209,15 @@ def migrate_dag_runs(source_deployment_url, target_deployment_url, token: str=No
     for dag_id in all_dag_ids:
         log.info(f"Getting all dag runs for dag_id: {dag_id}")
         dag_runs = get_all_dag_runs(source_deployment_url, dag_id)
-        if len(dag_runs) == 0:
+        if not dag_runs:
             log.info(f"No DAG Runs to sync for dag_id: {dag_id}")
-        else:
-            for i in range(0, len(dag_runs), MAX_OBJ_FETCH_NUM_PER_REQ):
-                batch_dag_runs = dag_runs[i: i + MAX_OBJ_FETCH_NUM_PER_REQ]
-                post_dag_runs(target_deployment_url, dag_id, batch_dag_runs, token)
-                log.info(f"Completed {(i/len(dag_runs)*100):.2f}% for dag runs")
-            log.info("Completed 100% for dag runs")
-            log.info(f"Synced {len(dag_runs)} dag runs to target Airflow")
+            continue
+
+        for i, dag_run in enumerate(dag_runs):
+            post_dag_run(target_deployment_url, dag_id, dag_run, token)
+            log.info(f"Posted {i}/{len(dag_runs)} dag runs for dag_id: {dag_id}")
+        log.info(f"Completed 100% for DAG Runs of dag_id: {dag_id}")
+        log.info(f"Synced {len(dag_runs)} DAG Runs to target Airflow")
         log.info("-" * 80)
 
 ##########
@@ -249,24 +249,24 @@ def get_all_task_instances(deployment_url, dag_id, token: str = None):
         offset += MAX_OBJ_FETCH_NUM_PER_REQ
     return all_task_instances
 
-def post_task_instances(deployment_url, dag_id, task_instances, token: str = None):
+def post_task_instance(deployment_url, dag_id, task_instance, token: str = None):
     url = f"https://{deployment_url}/api/starship/task_instances"
-    data = {"task_instances": task_instances}
-    log.info(f"Making request to {url} with data:\n{data}")
+    data = {"task_instances": [task_instance]}
+    log.info(f"Posting individual task_instance to {url} with data:\n{data}")
     try:
         response = requests.post(
             url,
             json=data,
             headers=_post_header(token),
-            timeout=120,
+            timeout=30,
         )
         response.raise_for_status()
     except requests.exceptions.RequestException as e:
         if e.response is not None:
             if e.response.status_code == 409:
-                log.warning(f"Task Instances already exist in target Airflow for dag_id: {dag_id}")
+                log.warning(f"Task Instance already exists for dag_id: {dag_id}, task_id: {task_instance.get('task_id')}, execution_date: {task_instance.get('execution_date')}")
             else:
-                log.error(f"Failed to post Task Instances for dag_id: {dag_id}. Confirm dag runs in target Airflow. Could be a false failure! {e}")
+                log.error(f"Failed to post individual task instance for dag_id: {dag_id}: {e}")
                 if e.response:
                     log.error(f"Response: {e.response.text}")
                 raise
@@ -281,15 +281,15 @@ def migrate_task_instances(source_deployment_url, target_deployment_url, token: 
     for dag_id in all_dag_ids:
         log.info(f"Getting all Task Instances for dag_id: {dag_id}")
         task_instances = get_all_task_instances(source_deployment_url, dag_id)
-        if len(task_instances) == 0:
-            log.info(f"No DAG Runs to sync for dag_id: {dag_id}")
-        else:
-            for i in range(0, len(task_instances), MAX_OBJ_FETCH_NUM_PER_REQ):
-                batch_task_instances = task_instances[i: i + MAX_OBJ_FETCH_NUM_PER_REQ]
-                post_task_instances(target_deployment_url, dag_id, batch_task_instances, token)
-                log.info(f"Completed {(i/len(task_instances)*100):.2f}% for dag runs")
-            log.info("Completed 100% for dag runs")
-            log.info(f"Synced {len(task_instances)} dag runs to target Airflow")
+        if not task_instances:
+            log.info(f"No Task Instances to sync for dag_id: {dag_id}")
+            continue
+
+        for i, task_instance in enumerate(task_instances, 1):
+            post_task_instance(target_deployment_url, dag_id, task_instance, token)
+            log.info(f"Posted {i}/{len(task_instances)} task instances")
+        log.info(f"Completed 100% for task instances of dag_id: {dag_id}")
+        log.info(f"Synced {len(task_instances)} task instances to target Airflow")
         log.info("-" * 80)
 
 
