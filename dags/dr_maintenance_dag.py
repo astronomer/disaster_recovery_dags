@@ -1,68 +1,103 @@
 from datetime import datetime
-from airflow import DAG
-from airflow.operators.python import PythonOperator
-from airflow.models.xcom_arg import XComArg
-from include import assign_tokens_to_backups
-from include.get_workspaces import get_deployments
-from include.create_backup_workspaces import create_backup_workspaces
-from include.create_backup_deployments import create_backup_deployments
+from airflow.decorators import dag, task
+from airflow.operators.python import get_current_context
+from include.get_workspaces import get_workspaces
+from include.create_backup_workspaces import create_backup_workspaces, map_source_workpaces_to_backup
+from include.create_backup_deployments import create_backup_deployments, get_source_deployments_payload
 from include.manage_backup_hibernation import manage_backup_hibernation
-from include.fresh_start import generate_organization_hierarchy
+from include.deploy_to_backup_deployments import deploy_to_backup_deployments
+from include.migrate_with_starship import migrate_metadata
 
-default_args = {
-    "owner": "airflow",
-    "retries": 3,
-    "retry_delay": 60,
-}
-
-with DAG(
-    dag_id="dr_maintenance_dag",
-    start_date=datetime(2023, 1, 1),
-    schedule_interval=None,
+@dag(
+    dag_id="dr_maintenance_dag_new",
+    start_date=datetime(2025, 1, 1),
+    schedule=None,
     catchup=False,
-    default_args=default_args,
+    default_args={
+        "owner": "astro",
+        "retries": 1,
+        "retry_delay": 5,
+    },
     description="Disaster recovery: create backup workspaces from primary deployments",
-) as dag:
+    tags=["Disaster Recovery", "Maintenance", "Example DAG"],
+)
+def dr_maintenance_dag():
+    @task(task_id="get_source_workspaces")
+    def get_source_workspaces_task():
+        return get_workspaces()
+    
+    @task(task_id="map_source_workspaces_to_backup")
+    def map_source_workpaces_to_backup_task(workspaces):
+        mapped_workspaces = map_source_workpaces_to_backup(workspaces)
+        return mapped_workspaces
 
-    get_deployments_task = PythonOperator(
-        task_id="get_deployments",
-        python_callable=get_deployments,
-        op_kwargs={"mode": "source"},
-    )
+    @task(map_index_template="{{ source_workspace_id }}")
+    def create_backup_workspaces_task(workspace):
+        context = get_current_context()
+        source_workspace_id = workspace.get("source_workspace_id")
+        backup_workspace_name = workspace.get("backup_workspace_name")
+        context["source_workspace_id"] = f"Backup for Workspace ID - {source_workspace_id}"
+        create_backup_workspaces(source_workspace_id, backup_workspace_name, context)
 
-    create_backup_workspaces_task = PythonOperator(
-        task_id="create_backup_workspaces",
-        python_callable=create_backup_workspaces,
-        op_args=[XComArg(get_deployments_task)],
-    )
+    @task(trigger_rule="none_failed", map_index_template="{{ source_workspace_id }}")
+    def get_source_deployments_task(workspace_ids):
+        context = get_current_context()
+        source_workspace_id = workspace_ids.get("source_workspace_id")
+        backup_workspace_id = workspace_ids.get("backup_workspace_id")
+        context["source_workspace_id"] = f"Deployments for Workspace ID - {source_workspace_id}"
+        workspace_deployments_mapping = get_source_deployments_payload(source_workspace_id, backup_workspace_id, context)
+        return workspace_deployments_mapping
+    
+    @task
+    def create_deployment_payloads(nested: list[list[dict]]) -> list[dict]:
+        return [item for sublist in nested for item in sublist]
 
-    create_backup_deployments_task = PythonOperator(
-        task_id="create_backup_deployments",
-        python_callable=create_backup_deployments,
-    )
+    @task(trigger_rule="none_failed", map_index_template="{{ source_deployment_id }}")
+    def create_backup_deployments_task(deployment):
+        context = get_current_context()
+        source_deployment_id = deployment.get("source_deployment_id")
+        deployment_payload = deployment.get("deployment_payload")
+        context["source_deployment_id"] = f"Backup for Deployment ID - {source_deployment_id}"
+        create_backup_deployments(deployment_payload, source_deployment_id, context)
 
-    unhibernate_backup_deployments_task = PythonOperator(
-        task_id="unhibernate_backup_deployments",
-        python_callable=manage_backup_hibernation,
-        op_kwargs={"deployment_set": "backup", "action": "unhibernate"},
-    )
+    @task(trigger_rule="none_failed", map_index_template="{{ backup_deployment_id }}")
+    def manage_backup_hibernation_task(action, deployment_id):
+        context = get_current_context()
+        context["backup_deployment_id"] = f"{deployment_id} - Un/Hibernate"
+        manage_backup_hibernation(deployment_id, action)
 
-    log_recreation_plan_task = PythonOperator(
-        task_id="log_recreation_plan",
-        python_callable=generate_organization_hierarchy
-    )
+    # @task(trigger_rule="none_failed", map_index_template="{{ source_deployment_id }}")
+    # def deploy_to_backup_deployments_task(deployment):
+    #     context = get_current_context()
+    #     source_deployment_id = deployment.get("source_deployment_id")
+    #     context["backup_deployment_id"] = f"Backup Deploy for - {source_deployment_id}"
+    #     deploy_to_backup_deployments(deployment)
 
+    @task(trigger_rule="none_failed", map_index_template="{{ backup_deployment_id }}")
+    def migrate_metadata_to_backup_deployments_task(deployment_id):
+        context = get_current_context()
+        context["backup_deployment_id"] = deployment_id
+        migrate_metadata(deployment_id, context)
 
-    # recreate_tokens = PythonOperator(
-    #     task_id='implement_recreation_plan',
-    #     python_callable=implement_recreation_plan,
-    # )
+    workspaces = get_source_workspaces_task()
+    mapped_workspaces = map_source_workpaces_to_backup_task(workspaces)
 
-    # hibernate_backup_deployments_task = PythonOperator(
-    #     task_id="hibernate_backup_deployments",
-    #     python_callable=manage_backup_hibernation,
-    #     op_kwargs={"deployment_set": "backup", "action": "hibernate"},
-    # )
+    workspace_id_mapping = create_backup_workspaces_task.expand(workspace=mapped_workspaces)
+    deployments = get_source_deployments_task.expand(workspace_ids=workspace_id_mapping)
 
-    # Set task dependencies
-    get_deployments_task >> create_backup_workspaces_task >> create_backup_deployments_task >> unhibernate_backup_deployments_task >> log_recreation_plan_task
+    deployments_payload = create_deployment_payloads(deployments)
+
+    created_deployments_ids = create_backup_deployments_task.expand(deployment=deployments_payload)
+
+    unhibernate_task = manage_backup_hibernation_task.override(task_id="unhibernate_backup_deployments").partial(action="unhibernate").expand(deployment_id=created_deployments_ids)
+
+    # deploy = deploy_to_backup_deployments_task.expand(deployment=deployments_payload)
+    
+    # hibernate_task = manage_backup_hibernation_task.override(task_id="hibernate_backup_deployments").partial(action="hibernate").expand(deployment_id=created_deployments_ids)
+
+    # # Todo:
+    # migrate_dags_metadata = migrate_metadata_to_backup_deployments_task.expand(deployment_id=deployments_payload)
+
+    # unhibernate_task >> deploy_dags >> migrate_dags_metadata >> hibernate_task
+
+dr_maintenance_dag()
