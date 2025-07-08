@@ -211,56 +211,48 @@ def do_image_deploy(source_image_tag, source_registry_link, description, source_
     dags_upload_url = deploy_initialized.get("dagsUploadUrl")
     deploy_id = deploy_initialized.get("id")
 
-    print("Logging into Docker...")
-    subprocess.run(["docker", "login", source_registry_link,"-u", "cli", "-p", ASTRO_TOKEN], check=True)
-    print("Docker login successful.")
+    cmd = [
+        "skopeo", "copy",
+        "--src-creds",  f"cli:{ASTRO_TOKEN}",
+        "--dest-creds", f"cli:{ASTRO_TOKEN}",
+        f"docker://{source_registry_link}:{source_image_tag}",
+        f"docker://{backup_registry_link}:{backup_image_tag}"
+    ]
 
-    print(f"Pulling Docker image {source_registry_link}:{source_image_tag}")
-    print(f"{source_registry_link}:{source_image_tag}")
-    subprocess.run(["docker", "pull", f"{source_registry_link}:{source_image_tag}"], check=True)
-    print("Docker image pulled successfully.")
-
-    subprocess.run(
-        [
-            "docker", "tag",
-            f"{source_registry_link}:{source_image_tag}",
-            f"{backup_registry_link}:{backup_image_tag}"
-        ],
-        check=True
-    )
-
-    print(f"Pushing Docker image {backup_registry_link}:{backup_image_tag}")
-    subprocess.run(["docker", "push", f"{backup_registry_link}:{backup_image_tag}"], check=True)
-    print("Docker image pushed successfully.")
+    print("Running:", " ".join(cmd))
+    subprocess.run(cmd, check=True)
+    print("Image successfully copied via skopeo")
 
     print("Downloading DAGs...")
-    s3_url = f"s3://af-demo-dags-bucket/{source_deployment_id}.tar.gz"
-    resp = requests.get(s3_url, stream=True)
+    url = f"https://af-demo-dags-bucket.s3.amazonaws.com/{source_deployment_id}.tar.gz"
+    resp = requests.get(url, stream=True)
     resp.raise_for_status()
+
+    with open(f"{source_deployment_id}.tar.gz", "wb") as f:
+        for chunk in resp.iter_content(1024 * 64):
+            f.write(chunk)
 
     print(f"Uploading tar file {source_deployment_id}.tar.gz")
     put_headers = {
         "x-ms-blob-type": "BlockBlob",
         "Content-Type": "application/x-gtar"
     }
+
     put_resp = requests.put(dags_upload_url, headers=put_headers, data=open(f"{source_deployment_id}.tar.gz", "rb"))
     put_resp.raise_for_status()
-    response = put_resp.json()
-    print(response)
-    print("DAGs uploaded successfully.")
+    version_id = put_resp.headers.get("x-ms-version-id")
+    print(f"DAGs uploaded successfully. Version ID: {version_id}")
 
     deploy_url = f"{ASTRO_API_URL}/organizations/{ORG_ID}/deployments/{backup_deployment_id}/deploys/{deploy_id}/finalize"
-    response = requests.post(deploy_url, headers=HEADERS)
+    response = requests.post(deploy_url, headers=HEADERS, json={"dagTarballVersion": version_id})
     response.raise_for_status()
     response = response.json()
-    print("Image deploy finalized successfully.")
-    print(f"Image deploy for deployment {backup_deployment_id} completed successfully.")
-
+    print(f"Image & DAG deploy for deployment {backup_deployment_id} completed successfully.")
     print(response)
 
 
 def do_dag_deploy(description, source_deployment_id, backup_deployment_id):
-    print(f"Initiating Image Deploy Process for deployment {backup_deployment_id}")
+    print(f"Initiating DAG-ONLY Deploy Process for deployment {backup_deployment_id}")
     deploy_url = f"{ASTRO_API_URL}/organizations/{ORG_ID}/deployments/{backup_deployment_id}/deploys"
     payload = {
         "type": "DAG_ONLY",
@@ -341,23 +333,18 @@ def replicate_deploy_to_backup(source_deployment_id: str, backup_deployment_id: 
     latest_image_deploy_backup = latest_deploy.get("IMAGE_AND_DAG")
 
 
-    # if not latest_image_deploy_backup or (latest_image_deploy_source.get("description") != latest_image_deploy_backup.get("description")):
-    #     description = latest_image_deploy_source.get("description")
-    #     source_registry_link = latest_image_deploy_source.get("imageRepository")
-    #     source_image_tag = latest_image_deploy_source.get("imageTag")
-    #     print("Mismatch in Image Deploys! Deploying image to backup deployment...")
-    #     do_image_deploy(source_image_tag, source_registry_link, description, source_deployment_id, backup_deployment_id)
-    # else:
-    #     print("Image Deploys are in sync.")
+    if not latest_image_deploy_backup or (latest_image_deploy_source.get("description") != latest_image_deploy_backup.get("description")):
+        description = latest_image_deploy_source.get("description")
+        source_registry_link = latest_image_deploy_source.get("imageRepository")
+        source_image_tag = latest_image_deploy_source.get("imageTag")
+        print("Mismatch in Image Deploys! Deploying image to backup deployment...")
+        do_image_deploy(source_image_tag, source_registry_link, description, source_deployment_id, backup_deployment_id)
+    else:
+        print("Image Deploys are in sync.")
 
-    # if not latest_dag_deploy_backup or (latest_dag_deploy_source.get("description") == latest_dag_deploy_backup.get("description")):
-    #     description = latest_dag_deploy_source.get("description")
-    #     print("Mismatch in DAG Deploys! Deploying DAG to backup deployment...")
-    #     do_dag_deploy(description, source_deployment_id, backup_deployment_id)
-    # else:
-    #     print("DAG Deploys are in sync.")
-
-    # To Do: Remove later
-    description = latest_dag_deploy_source.get("description")
-    print("Mismatch in DAG Deploys! Deploying DAG to backup deployment...")
-    do_dag_deploy(description, source_deployment_id, backup_deployment_id)
+    if not latest_dag_deploy_backup or (latest_dag_deploy_source.get("description") != latest_dag_deploy_backup.get("description")):
+        description = latest_dag_deploy_source.get("description")
+        print("Mismatch in DAG Deploys! Deploying DAG to backup deployment...")
+        do_dag_deploy(description, source_deployment_id, backup_deployment_id)
+    else:
+        print("DAG Deploys are in sync.")
