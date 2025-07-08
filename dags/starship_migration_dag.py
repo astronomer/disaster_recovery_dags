@@ -9,17 +9,10 @@ from airflow.models import DAG
 from airflow.decorators import task
 from airflow.operators.python import get_current_context
 from airflow.exceptions import AirflowException
-# from astronomer_starship.providers.starship.operators.starship import \
-from include.custom_operators.starship import \
-    starship_variables_migration, \
-    starship_connections_migration, \
-    starship_pools_migration, \
-    starship_dag_history_migration
 
 from include.create_backup_workspaces import map_source_workpaces_to_backup
 from include.get_workspaces import get_workspaces, get_deployment_mappings
 from include.manage_backup_hibernation import manage_backup_hibernation
-from include.custom_operators.starship import StarshipBulkVariableMigrationOperator
 from include.migrate_with_starship import migrate_variables, migrate_pools, migrate_dag_runs, migrate_task_instances
 
 with DAG(
@@ -37,60 +30,60 @@ with DAG(
         #     # TODO: add on-recovery
         # }
 ) as dag:
-    @task(task_id="get_source_workspaces")
-    def get_source_workspaces_task():
-        return get_workspaces()
+    # @task(task_id="get_source_workspaces")
+    # def get_source_workspaces_task():
+    #     return get_workspaces()
 
 
-    @task(task_id="map_source_workspaces_to_backup")
-    def map_source_workpaces_to_backup_task(workspaces):
-        mapped_workspaces = map_source_workpaces_to_backup(workspaces)
-        return mapped_workspaces
+    # @task(task_id="map_source_workspaces_to_backup")
+    # def map_source_workpaces_to_backup_task(workspaces):
+    #     mapped_workspaces = map_source_workpaces_to_backup(workspaces)
+    #     return mapped_workspaces
 
 
-    @task.python(task_id="generate_deployment_mappings")
-    def generate_deployment_mappings_task(workspace_maps):
-        all_deployment_mappings = []
+    # @task.python(task_id="generate_deployment_mappings")
+    # def generate_deployment_mappings_task(workspace_maps):
+    #     all_deployment_mappings = []
 
-        for workspace_map in workspace_maps:
-            source_ws_id = workspace_map["source_workspace_id"]
-            backup_ws_name = workspace_map["backup_workspace_name"]
+    #     for workspace_map in workspace_maps:
+    #         source_ws_id = workspace_map["source_workspace_id"]
+    #         backup_ws_name = workspace_map["backup_workspace_name"]
 
-            deployment_mappings = get_deployment_mappings(source_ws_id, backup_ws_name)
+    #         deployment_mappings = get_deployment_mappings(source_ws_id, backup_ws_name)
 
-            if not deployment_mappings:
-                print(f"No deployment mappings found for workspace pair: {source_ws_id} -> {backup_ws_name}")
-                continue
+    #         if not deployment_mappings:
+    #             print(f"No deployment mappings found for workspace pair: {source_ws_id} -> {backup_ws_name}")
+    #             continue
 
-            all_deployment_mappings.extend(deployment_mappings)
+    #         all_deployment_mappings.extend(deployment_mappings)
 
-        if not all_deployment_mappings:
-            print("No deployment mappings found for any workspace pairs.")
-            return []
+    #     if not all_deployment_mappings:
+    #         print("No deployment mappings found for any workspace pairs.")
+    #         return []
 
-        print(all_deployment_mappings)
-        return all_deployment_mappings
+    #     print(all_deployment_mappings)
+    #     return all_deployment_mappings
 
 
-    @task.python(task_id="unhibernate_backup_deployments_task", map_index_template="{{ backup_deployment }}")
-    def unhibernate_backup_deployments_task(deployment_mapping: Dict[str, str]):
-        backup_dep_id = deployment_mapping.get("backup_deployment_id")
-        deployment_name = deployment_mapping.get("deployment_name")
+    # @task.python(task_id="unhibernate_backup_deployments_task", map_index_template="{{ backup_deployment }}")
+    # def unhibernate_backup_deployments_task(deployment_mapping: Dict[str, str]):
+    #     backup_dep_id = deployment_mapping.get("backup_deployment_id")
+    #     deployment_name = deployment_mapping.get("deployment_name")
 
-        if not backup_dep_id:
-            raise AirflowException(f"Missing backup_deployment_id for mapping '{deployment_name}'. Cannot unhibernate.")
+    #     if not backup_dep_id:
+    #         raise AirflowException(f"Missing backup_deployment_id for mapping '{deployment_name}'. Cannot unhibernate.")
 
-        context = get_current_context()
-        context["backup_deployment"] = f"{deployment_name} (ID: {backup_dep_id})"
+    #     context = get_current_context()
+    #     context["backup_deployment"] = f"{deployment_name} (ID: {backup_dep_id})"
 
-        print(f"Processing backup deployment '{deployment_name}' (ID: {backup_dep_id}) for unhibernation.")
+    #     print(f"Processing backup deployment '{deployment_name}' (ID: {backup_dep_id}) for unhibernation.")
 
-        manage_backup_hibernation(
-            deployment_id=backup_dep_id,
-            action="unhibernate",
-        )
+    #     manage_backup_hibernation(
+    #         deployment_id=backup_dep_id,
+    #         action="unhibernate",
+    #     )
 
-        return
+    #     return
 
 
     @task(task_id="starship_variables_migration", map_index_template="{{ source_deployment }}")
