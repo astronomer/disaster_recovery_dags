@@ -95,7 +95,7 @@ def dr_maintenance_dag():
 
         context = get_current_context()
         context["backup_deployment_id"] = f"{backup_deployment_id} - Migrate Variables"
-        
+
         migrate_variables(
             source_deployment_url=source_deployment_url,
             target_deployment_url=target_deployment_url,
@@ -134,7 +134,6 @@ def dr_maintenance_dag():
 
     # hibernate_task = manage_backup_hibernation_task.override(task_id="hibernate_backup_deployments").partial(action="hibernate").expand(deployment_id=created_deployments_ids)
 
-    unhibernate_task >> replicate_deploy
-    
+    unhibernate_task >> replicate_deploy >> starship_migration
     
 dr_maintenance_dag()
