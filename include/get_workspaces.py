@@ -13,7 +13,7 @@ HEADERS = {
 }
 
 def get_workspaces():
-    workspaces = requests.get(WORKSPACES_URL, headers=HEADERS)
+    workspaces = requests.get(WORKSPACES_URL, headers=HEADERS, params={"limit": 1000})
     workspaces.raise_for_status()
     all_workspaces = workspaces.json()["workspaces"]
     return {workspace["id"] for workspace in all_workspaces}

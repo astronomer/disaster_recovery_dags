@@ -16,7 +16,7 @@ WORKSPACES_JSON_PATH = os.path.join(os.path.dirname(__file__), "workspaces_to_ba
 
 def create_backup_workspaces(source_workspace_id, backup_workspace_name, context):
     existing_url = f"https://api.astronomer.io/platform/v1beta1/organizations/{ASTRO_ORGANIZATION_ID}/workspaces"
-    existing_resp = requests.get(existing_url, headers=HEADERS)
+    existing_resp = requests.get(existing_url, headers=HEADERS, params={"limit": 1000})
     existing_resp.raise_for_status()
     existing_workspaces = existing_resp.json().get("workspaces", [])
 
