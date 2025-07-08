@@ -2,6 +2,7 @@ import requests
 from airflow.models import Variable
 import os
 import logging
+from include.assign_tokens_to_backups import get_workspace_hierarchy_with_deployments
 
 log = logging.getLogger(__name__)
 
@@ -132,9 +133,6 @@ def replicate_deploy_to_backup():
     Orchestrates replication of selected recent deploys from source deployments
     to their associated backup deployments using Airflow Variable `backupDeployOffset`.
     """
-    from airflow.models import Variable
-    from include.get_workspace_hierarchy import get_workspace_hierarchy_with_deployments
-    import logging
 
     log = logging.getLogger(__name__)
     backup_offset = int(Variable.get("backupDeployOffset", default_var=1))
