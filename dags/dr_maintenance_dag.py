@@ -5,7 +5,6 @@ from include.get_workspaces import get_workspaces
 from include.create_backup_workspaces import create_backup_workspaces, map_source_workpaces_to_backup
 from include.create_backup_deployments import create_backup_deployments, get_source_deployments_payload
 from include.manage_backup_hibernation import manage_backup_hibernation
-from include.deploy_to_backup_deployments import deploy_to_backup_deployments
 from include.migrate_with_starship import migrate_metadata
 from include.deploy_to_backup_deployments import replicate_deploy_to_backup
 
@@ -62,14 +61,20 @@ def dr_maintenance_dag():
         create_backup_deployments(deployment_payload, source_deployment_id, context)
 
     @task(trigger_rule="none_failed", map_index_template="{{ backup_deployment_id }}")
-    def manage_backup_hibernation_task(action, deployment_id):
+    def manage_backup_hibernation_task(action, deployments):
         context = get_current_context()
-        context["backup_deployment_id"] = f"{deployment_id} - Un/Hibernate"
-        manage_backup_hibernation(deployment_id, action)
+        backup_deployment_id = deployments.get("backup_deployment_id")
+        context["backup_deployment_id"] = f"{backup_deployment_id} - Un/Hibernate"
+        manage_backup_hibernation(backup_deployment_id, action)
 
-    @task(task_id="replicate_deploy_to_backup_task")
-    def run_replicate_deploy():
-        replicate_deploy_to_backup()
+    @task(trigger_rule="none_failed", map_index_template="{{ backup_deployment_id }}")
+    def replicate_deploy_to_backup_task(deployments):
+        context = get_current_context()
+        source_deployment_id = deployments.get("source_deployment_id")
+        backup_deployment_id = deployments.get("backup_deployment_id")
+        print(source_deployment_id, backup_deployment_id)
+        context["backup_deployment_id"] = f"{backup_deployment_id} - Deploy"
+        replicate_deploy_to_backup(source_deployment_id, backup_deployment_id, context)
 
     @task(trigger_rule="none_failed", map_index_template="{{ backup_deployment_id }}")
     def migrate_metadata_to_backup_deployments_task(deployment_id):
@@ -85,17 +90,17 @@ def dr_maintenance_dag():
 
     deployments_payload = create_deployment_payloads(deployments)
 
-    created_deployments_ids = create_backup_deployments_task.expand(deployment=deployments_payload)
+    created_deployments = create_backup_deployments_task.expand(deployment=deployments_payload)
 
-    unhibernate_task = manage_backup_hibernation_task.override(task_id="unhibernate_backup_deployments").partial(action="unhibernate").expand(deployment_id=created_deployments_ids)
+    unhibernate_task = manage_backup_hibernation_task.override(task_id="unhibernate_backup_deployments").partial(action="unhibernate").expand(deployments=created_deployments)
 
-    # deploy = deploy_to_backup_deployments_task.expand(deployment=deployments_payload)
-    
-    # hibernate_task = manage_backup_hibernation_task.override(task_id="hibernate_backup_deployments").partial(action="hibernate").expand(deployment_id=created_deployments_ids)
+    replicate_deploy = replicate_deploy_to_backup_task.expand(deployments=created_deployments)
 
-    # # Todo:
     # migrate_dags_metadata = migrate_metadata_to_backup_deployments_task.expand(deployment_id=deployments_payload)
 
-    # unhibernate_task >> deploy_dags >> migrate_dags_metadata >> hibernate_task
+    # hibernate_task = manage_backup_hibernation_task.override(task_id="hibernate_backup_deployments").partial(action="hibernate").expand(deployment_id=created_deployments_ids)
 
+    unhibernate_task >> replicate_deploy
+    
+    
 dr_maintenance_dag()

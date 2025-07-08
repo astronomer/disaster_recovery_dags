@@ -67,7 +67,7 @@ def create_backup_deployments(deployment_payload, source_deployment_id, context)
         resp = requests.get(url, headers=HEADERS)
         print(resp.text)
         existing_deployment = resp.json().get("deployments", [])
-        context["ti"].xcom_push(key="return_value", value=existing_deployment[0].get('id'))
+        context["ti"].xcom_push(key="return_value", value={"source_deployment_id": source_deployment_id, "backup_deployment_id": existing_deployment[0].get('id')})
         raise AirflowSkipException(f"Deployment {deployment_payload.get('name')} Already exists! Skipping.")
         
     elif create_resp.status_code in (201, 200):
@@ -99,7 +99,7 @@ def create_backup_deployments(deployment_payload, source_deployment_id, context)
                     print(f"Successfully created token: {token_name} for backup deployment {backup_deployment_id}")
                 else:
                     print(f"Failed to create token {token_name} for backup deployment {backup_deployment_id}. Status: {token_response.status_code}, Message: {token_response.text}")
-        return backup_deployment_id
+        context["ti"].xcom_push(key="return_value", value={"source_deployment_id": source_deployment_id, "backup_deployment_id": backup_deployment_id})
     else:
         raise AirflowException(f"Failed to create backup: {create_resp.status_code} {create_resp.text}")
 
