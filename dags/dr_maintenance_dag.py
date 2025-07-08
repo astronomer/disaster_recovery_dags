@@ -132,7 +132,7 @@ def dr_maintenance_dag():
 
     starship_migration = starship_migration_task.expand(deployments=created_deployments)
 
-    # hibernate_task = manage_backup_hibernation_task.override(task_id="hibernate_backup_deployments").partial(action="hibernate").expand(deployment_id=created_deployments_ids)
+    # hibernate_task = manage_backup_hibernation_task.override(task_id="hibernate_backup_deployments").partial(action="hibernate").expand(deployment_id=created_deployments)
 
     unhibernate_task >> replicate_deploy >> starship_migration
     
