@@ -1,45 +1,57 @@
-Overview
-========
+# Disaster Recovery DAGs for Astronomer
 
-Welcome to Astronomer! This project was generated after you ran 'astro dev init' using the Astronomer CLI. This readme describes the contents of the project, as well as how to run Apache Airflow on your local machine.
+This project provides an automated and modular way to manage **backup deployments** for selected Astronomer workspaces using the Astro API. It includes a fully orchestrated DAG (`dr_maintenance_dag`) and helper scripts to replicate, update, and hibernate backup deployments for disaster recovery.
 
-Project Contents
-================
+---
 
-Your Astro project contains the following files and folders:
+## 🔧 Purpose
 
-- dags: This folder contains the Python files for your Airflow DAGs. By default, this directory includes one example DAG:
-    - `example_astronauts`: This DAG shows a simple ETL pipeline example that queries the list of astronauts currently in space from the Open Notify API and prints a statement for each astronaut. The DAG uses the TaskFlow API to define tasks in Python, and dynamic task mapping to dynamically print a statement for each astronaut. For more on how this DAG works, see our [Getting started tutorial](https://www.astronomer.io/docs/learn/get-started-with-airflow).
-- Dockerfile: This file contains a versioned Astro Runtime Docker image that provides a differentiated Airflow experience. If you want to execute other commands or overrides at runtime, specify them here.
-- include: This folder contains any additional files that you want to include as part of your project. It is empty by default.
-- packages.txt: Install OS-level packages needed for your project by adding them to this file. It is empty by default.
-- requirements.txt: Install Python packages needed for your project by adding them to this file. It is empty by default.
-- plugins: Add custom or community plugins for your project to this file. It is empty by default.
-- airflow_settings.yaml: Use this local-only file to specify Airflow Connections, Variables, and Pools instead of entering them in the Airflow UI as you develop DAGs in this project.
+This project ensures that critical Astronomer deployments have up-to-date and immediately usable backups.
 
-Deploy Your Project Locally
-===========================
+- Creates and maintains **backup deployments** in a target cluster.
+- Schedules backup deployment **replication, updates, and hibernation**.
+- **Clones API tokens** from source deployments/workspaces and applies equivalent roles in the backup environment.
+- Ensures DAGs and environment are replicated using **historical deploys**.
+- Uses [Astro Starship](https://docs.astronomer.io/astro/starship) to **migrate metadata DBs** from source to backup deployments.
 
-Start Airflow on your local machine by running 'astro dev start'.
+---
 
-This command will spin up five Docker containers on your machine, each for a different Airflow component:
+## ✅ Requirements
 
-- Postgres: Airflow's Metadata Database
-- Scheduler: The Airflow component responsible for monitoring and triggering tasks
-- DAG Processor: The Airflow component responsible for parsing DAGs
-- API Server: The Airflow component responsible for serving the Airflow UI and API
-- Triggerer: The Airflow component responsible for triggering deferred tasks
+Before running the DAG or any manual scripts, ensure the following are available:
 
-When all five containers are ready the command will open the browser to the Airflow UI at http://localhost:8080/. You should also be able to access your Postgres Database at 'localhost:5432/postgres' with username 'postgres' and password 'postgres'.
+- **Astro API Token** with `Organization Admin` permissions
+- **Astro Organization ID**
+- **Target Cluster ID** where backup deployments should be created
 
-Note: If you already have either of the above ports allocated, you can either [stop your existing Docker containers or change the port](https://www.astronomer.io/docs/astro/cli/troubleshoot-locally#ports-are-not-available-for-my-local-airflow-webserver).
+These values should be stored as environment variables, as demonstrated by `.env_example`
 
-Deploy Your Project to Astronomer
-=================================
+## 🚀 `dr_maintenance_dag` Breakdown
 
-If you have an Astronomer account, pushing code to a Deployment on Astronomer is simple. For deploying instructions, refer to Astronomer documentation: https://www.astronomer.io/docs/astro/deploy-code/
+This DAG orchestrates the full disaster recovery workflow. Below is a walkthrough of each task:
 
-Contact
-=======
+| Task ID                          | Description |
+|----------------------------------|-------------|
+| `get_source_workspaces_task`     | Loads the list of source workspaces to back up from `workspaces_to_backup.json`. |
+| `map_source_workpaces_to_backup_task` | Maps source to backup workspace names and prepares them for ID resolution. |
+| `create_backup_workspaces_task`  | Creates backup workspaces if they do not already exist. |
+| `get_source_deployments_task`    | Fetches deployments from source workspaces using Astro API. |
+| `create_backup_deployments_task` | Creates backup deployments in the target cluster with identical configurations. |
+| `manage_backup_hibernation_task` (as `unhibernate_backup_deployments`) | Unhibernates backup deployments to prepare them for deploy and metadata sync. |
+| `replicate_deploy_to_backup_task`| Uses recent deploy history to replicate DAGs, environment, and code to the backup deployment. |
+| `starship_migration_task`        | Migrates metadata DBs (including variables, pools, DAG runs, task instances) from source to backup using Astro Starship. |
+| `manage_backup_hibernation_task` (commented out as `hibernate_backup_deployments`) | (Optional) Re-hibernates the backup deployments after migration completes. |
 
-The Astronomer CLI is maintained with love by the Astronomer team. To report a bug or suggest a change, reach out to our support.
+## 🧰 Scripts in `/include`
+
+Each script in the `include` folder can be run independently to manually replicate the DAG logic. They handle tasks like workspace creation, deployment replication, hibernation control, and metadata migration.
+
+| Script | Description | Astro API Endpoints Used |
+|--------|-------------|---------------------------|
+| `get_workspaces.py` | Loads workspace mappings from JSON, resolves names to IDs using Astro API. | [List Workspaces](https://www.astronomer.io/docs/api/platform-api-reference/workspace/list-workspaces) |
+| `create_backup_workspaces.py` | Creates backup workspaces from JSON config. Maps source to backup workspace IDs. | [Create Workspace](https://www.astronomer.io/docs/api/platform-api-reference/workspace/create-workspace) |
+| `create_backup_deployments.py` | Clones source deployments into backup workspaces with matching config. | [List Deployments](https://www.astronomer.io/docs/api/platform-api-reference/deployment/list-deployments), [Get Deployment](https://www.astronomer.io/docs/api/platform-api-reference/deployment/get-deployment), [Create Deployment](https://www.astronomer.io/docs/api/platform-api-reference/deployment/create-deployment) |
+| `manage_backup_hibernation.py` | Unhibernates or hibernates deployments. Polls status until deployments are healthy. | [Override Hibernation](https://www.astronomer.io/docs/api/platform-api-reference/deployment/override-hibernation), [Get Deployment](https://www.astronomer.io/docs/api/platform-api-reference/deployment/get-deployment) |
+| `deploy_to_backup_deployments.py` | Lists deploy history and replicates chosen deploys to backup deployments. Finalizes the deploy. | [List Deploys](https://www.astronomer.io/docs/api/platform-api-reference/deploy/list-deploys), [Create Deploy](https://www.astronomer.io/docs/api/platform-api-reference/deploy/create-deploy), [Finalize Deploy](https://www.astronomer.io/docs/api/platform-api-reference/deploy/finalize-deploy) |
+| `migrate_with_starship.py` | Uses Astro Starship to migrate metadata: variables, pools, DAG runs, task instances. | [Starship CLI Docs](https://docs.astronomer.io/astro/starship) |
+| `assign_tokens_to_backups.py` | Creates new API tokens for backup workspaces/deployments, mirroring names and roles from source. | [Create Token](https://www.astronomer.io/docs/api/platform-api-reference/auth/create-token) |
