@@ -1,15 +1,34 @@
+"""
+### Disaster Recovery Maintenance DAG
+### Required Environment Variables:
+- `ASTRO_API_TOKEN`: Your Astronomer API token (`Org Level`).
+- `ASTRO_ORGANIZATION_ID`: Your Astronomer organization ID.
+- `CLUSTER_ID`: The ID of the cluster where the deployments should be created (`Backup Cluster ID`).
+- `MAX_OBJ_FETCH_NUM_PER_REQ`: No of objects to fetch per request (default: `100`).
+- `MAX_OBJ_POST_NUM_PER_REQ`: No of objects to post per request (default: `50`).
+- `DAG_RUNS_START_DATE_FOR_MIGRATION`: Date from which to migrate DAG runs (default: `Last 48 Hours`).
+- `MIGRATE_DAGS_FROM_DATE`: Whether to migrate DAGs from a specific date (default: `YES`).
+### Prerequisites:
+`astronomer-starship` should be installed in source and backup deployements.
+"""
+
 import os
 from datetime import datetime
+from airflow.models.param import Param
 from airflow.decorators import dag, task
 from airflow.operators.python import get_current_context
 from include.get_workspaces import get_workspaces
 from include.create_backup_workspaces import create_backup_workspaces, map_source_workpaces_to_backup
 from include.create_backup_deployments import create_backup_deployments, get_source_deployments_payload
 from include.manage_backup_hibernation import manage_backup_hibernation
-from include.migrate_with_starship import migrate_metadata
 from include.deploy_to_backup_deployments import replicate_deploy_to_backup
-from include.migrate_with_starship import migrate_variables, migrate_pools, migrate_dag_runs, migrate_task_instances
-
+from include.migrate_with_starship import (
+    migrate_variables,
+    migrate_pools,
+    migrate_dag_runs,
+    migrate_task_instances,
+    flip_dags_state
+)
 
 @dag(
     dag_id="dr_maintenance_dag",
@@ -21,7 +40,14 @@ from include.migrate_with_starship import migrate_variables, migrate_pools, migr
         "retries": 1,
         "retry_delay": 5,
     },
-    description="Disaster recovery: create backup workspaces from primary deployments",
+    params={
+        "failover": Param(
+            False,
+            type="boolean",
+            description="Whether to failover to backup deployments."
+        )
+    },
+    doc_md=__doc__,
     tags=["Disaster Recovery", "Maintenance", "Example DAG"],
 )
 def dr_maintenance_dag():
@@ -75,15 +101,30 @@ def dr_maintenance_dag():
         context = get_current_context()
         source_deployment_id = deployments.get("source_deployment_id")
         backup_deployment_id = deployments.get("backup_deployment_id")
-        print(source_deployment_id, backup_deployment_id)
         context["backup_deployment_id"] = f"{backup_deployment_id} - Deploy"
         replicate_deploy_to_backup(source_deployment_id, backup_deployment_id, context)
 
-    @task(trigger_rule="none_failed", map_index_template="{{ backup_deployment_id }}")
-    def migrate_metadata_to_backup_deployments_task(deployment_id):
+    @task.branch
+    def check_failover_condition():
         context = get_current_context()
-        context["backup_deployment_id"] = deployment_id
-        migrate_metadata(deployment_id, context)
+        failover = bool(context["params"].get("failover", False))
+        if failover:
+            return "failover_to_backup_deployment_task"
+        else:
+            return "starship_migration_task"
+    
+    @task(trigger_rule="none_failed", map_index_template="{{ backup_deployment_id }}")
+    def failover_to_backup_deployment_task(deployments):
+        context = get_current_context()
+        ORG_ID = os.environ["ASTRO_ORGANIZATION_ID"]
+        source_deployment_id = deployments.get("source_deployment_id")
+        backup_deployment_id = deployments.get("backup_deployment_id")
+        context["backup_deployment_id"] = f"{source_deployment_id} to {backup_deployment_id} - Failover/Pause Source DAGs"
+
+        flip_dags_state(
+            dag_state='pause',
+            deployment_url=f"{ORG_ID}.astronomer.run/d{source_deployment_id[-7:]}"
+        )
 
     @task(trigger_rule="none_failed", map_index_template="{{ backup_deployment_id }}")
     def starship_migration_task(deployments):
@@ -94,7 +135,7 @@ def dr_maintenance_dag():
         target_deployment_url = f"{ORG_ID}.astronomer.run/d{backup_deployment_id[-7:]}"
 
         context = get_current_context()
-        context["backup_deployment_id"] = f"{backup_deployment_id} - Migrate Variables"
+        context["backup_deployment_id"] = f"{backup_deployment_id} - Migrate History"
 
         migrate_variables(
             source_deployment_url=source_deployment_url,
@@ -116,6 +157,21 @@ def dr_maintenance_dag():
             target_deployment_url=target_deployment_url,
         )
 
+    @task(trigger_rule="none_failed", map_index_template="{{ backup_deployment_id }}")
+    def post_migration_activities(deployments):
+        context = get_current_context()
+        ORG_ID = os.environ["ASTRO_ORGANIZATION_ID"]
+        backup_deployment_id = deployments.get("backup_deployment_id")
+        context["backup_deployment_id"] = f"{backup_deployment_id} - Unpause Backup DAGs"
+        failover = bool(context["params"].get("failover", False))
+        if not failover:
+            manage_backup_hibernation(backup_deployment_id, action="hibernate")
+        else:
+            flip_dags_state(
+                dag_state='unpause',
+                deployment_url=f"{ORG_ID}.astronomer.run/d{backup_deployment_id[-7:]}"
+            )
+
     workspaces = get_source_workspaces_task()
     mapped_workspaces = map_source_workpaces_to_backup_task(workspaces)
 
@@ -130,10 +186,15 @@ def dr_maintenance_dag():
 
     replicate_deploy = replicate_deploy_to_backup_task.expand(deployments=created_deployments)
 
+    is_failover = check_failover_condition()
+
+    failover = failover_to_backup_deployment_task.expand(deployments=created_deployments)
+
     starship_migration = starship_migration_task.expand(deployments=created_deployments)
 
-    # hibernate_task = manage_backup_hibernation_task.override(task_id="hibernate_backup_deployments").partial(action="hibernate").expand(deployment_id=created_deployments)
+    post_migration = post_migration_activities.expand(deployments=created_deployments)
 
-    unhibernate_task >> replicate_deploy >> starship_migration
-    
+    unhibernate_task >> replicate_deploy >> is_failover >> starship_migration >> post_migration
+    is_failover >> failover >> starship_migration
+
 dr_maintenance_dag()

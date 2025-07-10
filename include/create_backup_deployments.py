@@ -9,7 +9,7 @@ log = logging.getLogger(__name__)
 ASTRO_API_URL = "https://api.astronomer.io/platform/v1beta1"
 ASTRO_TOKEN = os.environ["ASTRO_API_TOKEN"]
 ORG_ID = os.environ["ASTRO_ORGANIZATION_ID"]
-NEW_CLUSTER_ID = os.environ["NEW_CLUSTER_ID"]
+CLUSTER_ID = os.environ["CLUSTER_ID"]
 HEADERS = {
         "Authorization": f"Bearer {ASTRO_TOKEN}",
         "Content-Type": "application/json",
@@ -31,7 +31,7 @@ def get_source_deployments_payload(source_workspace_id, backup_workspace_id, con
         payload = {
             "name": deployment_details.get("name"),
             "workspaceId": backup_workspace_id,
-            "clusterId": NEW_CLUSTER_ID,
+            "clusterId": CLUSTER_ID,
             "runtimeVersion": deployment_details.get("runtimeVersion"),
             "astroRuntimeVersion": deployment_details.get("astroRuntimeVersion"),
             "dagDeployEnabled": deployment_details.get("dagDeployEnabled", False),
@@ -65,7 +65,6 @@ def create_backup_deployments(deployment_payload, source_deployment_id, context)
     if "already exists" in create_resp.text:
         url = f"{ASTRO_API_URL}/organizations/{ORG_ID}/deployments?names={deployment_payload.get('name')}&workspaceIds={deployment_payload.get('workspaceId')}"
         resp = requests.get(url, headers=HEADERS)
-        print(resp.text)
         existing_deployment = resp.json().get("deployments", [])
         context["ti"].xcom_push(key="return_value", value={"source_deployment_id": source_deployment_id, "backup_deployment_id": existing_deployment[0].get('id')})
         raise AirflowSkipException(f"Deployment {deployment_payload.get('name')} Already exists! Skipping.")
@@ -73,7 +72,7 @@ def create_backup_deployments(deployment_payload, source_deployment_id, context)
     elif create_resp.status_code in (201, 200):
         created = create_resp.json()
         backup_deployment_id = created['id']
-        print(f"Created backup deployment: {backup_deployment_id} ({created['name']})")
+        log.info(f"Created backup deployment: {backup_deployment_id} ({created['name']})")
 
         get_tokens_url = f"https://api.astronomer.io/iam/v1beta1/organizations/{ORG_ID}/tokens?deploymentId={source_deployment_id}"
         response = requests.get(get_tokens_url, headers=HEADERS)
@@ -96,9 +95,9 @@ def create_backup_deployments(deployment_payload, source_deployment_id, context)
                 create_token_url = f"https://api.astronomer.io/iam/v1beta1/organizations/{ORG_ID}/tokens"
                 token_response = requests.post(create_token_url, headers=HEADERS, json=token_payload)
                 if token_response.status_code in (201, 200):
-                    print(f"Successfully created token: {token_name} for backup deployment {backup_deployment_id}")
+                    log.info(f"Successfully created token: {token_name} for backup deployment {backup_deployment_id}")
                 else:
-                    print(f"Failed to create token {token_name} for backup deployment {backup_deployment_id}. Status: {token_response.status_code}, Message: {token_response.text}")
+                    log.info(f"Failed to create token {token_name} for backup deployment {backup_deployment_id}. Status: {token_response.status_code}, Message: {token_response.text}")
         context["ti"].xcom_push(key="return_value", value={"source_deployment_id": source_deployment_id, "backup_deployment_id": backup_deployment_id})
     else:
         raise AirflowException(f"Failed to create backup: {create_resp.status_code} {create_resp.text}")

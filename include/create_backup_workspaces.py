@@ -1,9 +1,10 @@
 import os
 import requests
 import json
+import logging
 from airflow.exceptions import AirflowException, AirflowSkipException
 
-
+log = logging.getLogger(__name__)
 ASTRO_API_TOKEN = os.getenv("ASTRO_API_TOKEN")
 ASTRO_ORGANIZATION_ID = os.getenv("ASTRO_ORGANIZATION_ID")
 
@@ -38,7 +39,7 @@ def create_backup_workspaces(source_workspace_id, backup_workspace_name, context
     if existing_workspace:
         source_workspace_description = existing_workspace.get("description", "")
         source_workspace_cicd_default = existing_workspace.get("cicdEnforcedDefault", True)
-        print(f"Creating backup workspace for {source_workspace_id} as {backup_workspace_name}")
+        log.info(f"Creating backup workspace for {source_workspace_id} as {backup_workspace_name}")
 
         payload = {
             "name": backup_workspace_name,
@@ -51,11 +52,11 @@ def create_backup_workspaces(source_workspace_id, backup_workspace_name, context
         
         if response.status_code in (201, 200):
             backup_workspace_id = response.json().get("id")
-            print(f"Successfully created backup workspace: {backup_workspace_name}")
+            log.info(f"Successfully created backup workspace: {backup_workspace_name}")
             ti = context['ti']
             ti.xcom_push(key="return_value", value={"source_workspace_id": source_workspace_id, "backup_workspace_id": backup_workspace_id})
         else:
-            print(f"Failed to create backup workspace {backup_workspace_name}. Status: {response.status_code}, Message: {response.text}")
+            log.info(f"Failed to create backup workspace {backup_workspace_name}. Status: {response.status_code}, Message: {response.text}")
 
         get_tokens_url = f"https://api.astronomer.io/iam/v1beta1/organizations/{ASTRO_ORGANIZATION_ID}/tokens?workspaceId={source_workspace_id}"
         response = requests.get(get_tokens_url, headers=HEADERS)
@@ -78,9 +79,9 @@ def create_backup_workspaces(source_workspace_id, backup_workspace_name, context
                 create_token_url = f"https://api.astronomer.io/iam/v1beta1/organizations/{ASTRO_ORGANIZATION_ID}/tokens"
                 token_response = requests.post(create_token_url, headers=HEADERS, json=token_payload)
                 if token_response.status_code in (201, 200):
-                    print(f"Successfully created token: {token_name} for backup workspace {backup_workspace_name}")
+                    log.info(f"Successfully created token: {token_name} for backup workspace {backup_workspace_name}")
                 else:
-                    print(f"Failed to create token {token_name} for backup workspace {backup_workspace_name}. Status: {token_response.status_code}, Message: {token_response.text}")
+                    log.info(f"Failed to create token {token_name} for backup workspace {backup_workspace_name}. Status: {token_response.status_code}, Message: {token_response.text}")
 
     else:
         raise AirflowException(f"Source workspace {source_workspace_id} not found in existing workspaces. Cannot create backup.")
@@ -102,6 +103,6 @@ def map_source_workpaces_to_backup(workspaces):
                 "backup_workspace_name": workspace_backup_name
             })
         else:
-            print(f"Source workspace {workspace_source_id} not found in provided workspaces.")
+            log.info(f"Source workspace {workspace_source_id} not found in provided workspaces.")
 
     return mapped_workspaces
