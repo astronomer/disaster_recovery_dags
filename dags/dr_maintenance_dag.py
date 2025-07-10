@@ -1,17 +1,3 @@
-"""
-### Disaster Recovery Maintenance DAG
-### Required Environment Variables:
-- `ASTRO_API_TOKEN`: Your Astronomer API token (`Org Level`).
-- `ASTRO_ORGANIZATION_ID`: Your Astronomer organization ID.
-- `CLUSTER_ID`: The ID of the cluster where the deployments should be created (`Backup Cluster ID`).
-- `MAX_OBJ_FETCH_NUM_PER_REQ`: No of objects to fetch per request (default: `100`).
-- `MAX_OBJ_POST_NUM_PER_REQ`: No of objects to post per request (default: `50`).
-- `DAG_RUNS_START_DATE_FOR_MIGRATION`: Date from which to migrate DAG runs (default: `Last 48 Hours`).
-- `MIGRATE_DAGS_FROM_DATE`: Whether to migrate DAGs from a specific date (default: `YES`).
-### Prerequisites:
-`astronomer-starship` should be installed in source and backup deployements.
-"""
-
 import os
 from datetime import datetime
 from airflow.models.param import Param
@@ -47,8 +33,8 @@ from include.migrate_with_starship import (
             description="Whether to failover to backup deployments."
         )
     },
-    doc_md=__doc__,
-    tags=["Disaster Recovery", "Maintenance", "Example DAG"],
+    description="Disaster Recovery DAG.",
+    tags=["Disaster Recovery", "Example DAG"],
 )
 def dr_maintenance_dag():
     @task(task_id="get_source_workspaces")
