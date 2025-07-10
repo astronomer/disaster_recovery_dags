@@ -21,6 +21,7 @@ This project ensures that critical Astronomer deployments have up-to-date and im
 
 Before running the DAG or any manual scripts, ensure the following are available:
 
+- **AWS conn & DAGs in S3 Bucket** preferrably in zipped format
 - **Astro API Token** with `Organization Admin` permissions
 - **Astro Organization ID**
 - **Target Cluster ID** where backup deployments should be created

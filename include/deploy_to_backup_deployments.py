@@ -42,6 +42,8 @@ def do_image_deploy(source_image_tag, source_registry_link, description, source_
     log.info("Image successfully copied via skopeo")
 
     log.info("Downloading DAGs...")
+    # This is a placeholder URL; you should replace it with the actual URL where your DAGs tarball is hosted
+    # This example is for Public S3 Bucket. For Private S3 Buckets, you may need to use a signed URL or other authentication methods.
     url = f"https://af-demo-dags-bucket.s3.amazonaws.com/{source_deployment_id}.tar.gz"
     resp = requests.get(url, stream=True)
     resp.raise_for_status()
