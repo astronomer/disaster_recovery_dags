@@ -19,12 +19,12 @@ from include.migrate_with_starship import (
 @dag(
     dag_id="dr_maintenance_dag",
     start_date=datetime(2025, 1, 1),
-    schedule=None,
+    schedule="@daily",
     catchup=False,
     default_args={
         "owner": "astro",
-        "retries": 1,
-        "retry_delay": 5,
+        "retries": 3,
+        "retry_delay": 60,
     },
     params={
         "failover": Param(
@@ -112,7 +112,7 @@ def dr_maintenance_dag():
             deployment_url=f"{ORG_ID}.astronomer.run/d{source_deployment_id[-7:]}"
         )
 
-    @task(trigger_rule="none_failed", map_index_template="{{ backup_deployment_id }}")
+    @task(trigger_rule="all_done", map_index_template="{{ backup_deployment_id }}")
     def starship_migration_task(deployments):
         ORG_ID = os.environ["ASTRO_ORGANIZATION_ID"]
         source_deployment_id = deployments.get("source_deployment_id")
@@ -143,7 +143,7 @@ def dr_maintenance_dag():
             target_deployment_url=target_deployment_url,
         )
 
-    @task(trigger_rule="none_failed", map_index_template="{{ backup_deployment_id }}")
+    @task(trigger_rule="all_done", map_index_template="{{ backup_deployment_id }}")
     def post_migration_activities(deployments):
         context = get_current_context()
         ORG_ID = os.environ["ASTRO_ORGANIZATION_ID"]
@@ -151,7 +151,8 @@ def dr_maintenance_dag():
         context["backup_deployment_id"] = f"{backup_deployment_id} - Unpause Backup DAGs"
         failover = bool(context["params"].get("failover", False))
         if not failover:
-            manage_backup_hibernation(backup_deployment_id, action="hibernate")
+            # manage_backup_hibernation(backup_deployment_id, action="hibernate")
+            pass
         else:
             flip_dags_state(
                 dag_state='unpause',
