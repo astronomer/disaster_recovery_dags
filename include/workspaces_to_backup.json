@@ -1,7 +1,7 @@
 [
   {
-    "source_workspace_id": "cmctmi7mu25y601lyb51ds9kb",
-    "source_workspace_name": "Indraneel Source Workspace",
-    "backup_workspace_name": "Indraneel Backup Workspace"
+    "source_workspace_id": "<Workspace ID to backup>",
+    "source_workspace_name": "<Name of workspace to backup>",
+    "backup_workspace_name": "<Name of workspace for backup>"
   }
 ]
