@@ -1,7 +1,7 @@
 [
   {
-    "source_workspace_id": "clr2kw5rp00db01h86b627mxa",
-    "source_workspace_name": "Jon Leek Sandbox",
-    "backup_workspace_name": "backup-dr-test"
+    "source_workspace_id": "<Workspace ID to backup>",
+    "source_workspace_name": "<Name of workspace to backup>",
+    "backup_workspace_name": "<Name of workspace for backup>"
   }
 ]
