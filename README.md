@@ -30,6 +30,13 @@ Before running the DAG or any manual scripts, ensure the following are available
 
 These values should be stored as environment variables, as demonstrated by `.env_example`
 
+## How to Use
+
+The dag has two functions:
+1. When scheduled, it will create and maintain backup workspaces using the Astro API. Source workspaces, the clusters they are to be backed up to, and the name of the backup workspaces are defined in `workspaces_to_backup.json`. Optional Environmnt variables as shown in `.env_example` allow for the the configuration of how much task history is backed up.
+2. When manually run, the user has the option to restore from backups. When selected, the dag will attempt to update all backups one last time, then hibernate all pause all dags in the source deployments, unhibernate the backups, and unpause all backed up dags.
+
+
 ## 🚀 `dr_maintenance_dag` Breakdown
 
 This DAG orchestrates the full disaster recovery workflow. Below is a walkthrough of each task:
